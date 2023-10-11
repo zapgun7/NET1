@@ -13,6 +13,7 @@
 #include <string>
 #include <map>
 #include "buffer.h"
+#include "cUserRoomInfoHandler.h"
 
 // Need to link Ws2_32.lib
 #pragma comment(lib, "Ws2_32.lib")
@@ -34,11 +35,6 @@ struct ChatMessage
 	std::string message;
 };
 
-struct UserInfo
-{
-	std::string username;
-	int room;
-};
 
 std::vector<SOCKET> gClientList;
 
@@ -111,8 +107,7 @@ int main(int arg, char** argv)
 
 
 	std::vector<SOCKET> activeConnections;
-	std::map<int, std::vector<SOCKET>> *room_map;
-	std::map<SOCKET, UserInfo> *user_Info_map; // Helpful to remove user from the above map
+	cUserRoomInfoHandler sessionInfo;
 
 	FD_SET activeSockets;				// List of all of the clients ready to read.
 	FD_SET socketsReadyForReading;		// List of all of the connections
@@ -185,7 +180,7 @@ int main(int arg, char** argv)
 							activeConnections.erase(activeConnections.begin() + i); // remove from active connections                still gotta remove from room map, should make a function
 						}
 					}
-					removeFromRoom(socket, room_map, user_Info_map, true); // Purging user from system
+					sessionInfo.removeFromRoom(socket, -1); // Purging user from system
 					continue; // Skip rest since the socket has been removed
 				}
 
@@ -284,6 +279,7 @@ int main(int arg, char** argv)
 
 					// Handle successful connection
 					activeConnections.push_back(newConnection);
+					sessionInfo.initializeUser(newConnection); // Add new user to the "database"
 					FD_SET(newConnection, &activeSockets);
 					FD_CLR(listenSocket, &socketsReadyForReading);
 
@@ -306,38 +302,4 @@ int main(int arg, char** argv)
 	WSACleanup();
 
 	return 0;
-}
-
-
-int removeFromRoom(SOCKET socket, std::map<int, std::vector<SOCKET>> *roomMap, std::map<SOCKET, UserInfo> *user_Info_map, bool purge) // return
-{
-	std::map<SOCKET, UserInfo>::iterator itInfo = user_Info_map->find(socket); // find userinfo associated with socket
-
-	std::map< int, std::vector<SOCKET>>::iterator itUserVector = roomMap->find(itInfo->second.room); // Find vector associated with that room
-
-	for (unsigned int i = 0; i < itUserVector->second.size(); i++)
-	{
-		if (itUserVector->second[i] == socket)
-		{
-			itUserVector->second.erase(itUserVector->second.begin() + i); // remove from the room
-			break;
-		}
-	}
-	// If we're dealing with a user full disconnecting from the server
-	if (purge)
-		user_Info_map->erase(socket); // Remove from the user to room map
-	else
-		itInfo->second.room = -1;
-
-	return itUserVector->first; // Return room identifier to broadcast user leaving
-}
-
-void addToRoom(SOCKET socket, int room, std::map<int, std::vector<SOCKET>> *roomMap, std::map<SOCKET, int> *user_Room_map)
-{
-	user_Room_map->insert({ socket,room }); // Add info to user-to-room map
-
-	std::map< int, std::vector<SOCKET>>::iterator itUserVector = roomMap->find(room); // Find user vector associated with the desired room
-	itUserVector->second.push_back(socket); // Add socket to the vector
-
-	return;
 }
