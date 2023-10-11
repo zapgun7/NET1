@@ -11,6 +11,7 @@
 
 #include <vector>
 #include <string>
+#include <map>
 #include "buffer.h"
 
 // Need to link Ws2_32.lib
@@ -31,6 +32,12 @@ struct ChatMessage
 	PacketHeader header;
 	uint32_t messageLength;
 	std::string message;
+};
+
+struct UserInfo
+{
+	std::string username;
+	int room;
 };
 
 std::vector<SOCKET> gClientList;
@@ -104,6 +111,8 @@ int main(int arg, char** argv)
 
 
 	std::vector<SOCKET> activeConnections;
+	std::map<int, std::vector<SOCKET>> *room_map;
+	std::map<SOCKET, UserInfo> *user_Info_map; // Helpful to remove user from the above map
 
 	FD_SET activeSockets;				// List of all of the clients ready to read.
 	FD_SET socketsReadyForReading;		// List of all of the connections
@@ -165,6 +174,29 @@ int main(int arg, char** argv)
 				//		0 : client disconnected
 				//		>0: The number of bytes received.
 				int result = recv(socket, (char*)(&buffer.m_BufferData[0]), bufSize, 0);
+
+				// Client has disconnected, need to purge their socket from the system
+				if (result == 0)
+				{
+					for (unsigned int i = 0; i < activeConnections.size(); i++)
+					{
+						if (activeConnections[i] == socket)
+						{
+							activeConnections.erase(activeConnections.begin() + i); // remove from active connections                still gotta remove from room map, should make a function
+						}
+					}
+					removeFromRoom(socket, room_map, user_Info_map, true); // Purging user from system
+					continue; // Skip rest since the socket has been removed
+				}
+
+
+				// If an error, check if it just a buffer space issue
+				if ((result == SOCKET_ERROR) && (WSAGetLastError() == WSAEMSGSIZE))                           // Can optimize a little by saving the space if we need more than 512, but haven't received all of the message
+				{
+					Buffer buffer(buffer.ReadUInt32BE()); // Initialize new buffer with exactly enough room
+					result = recv(socket, (char*)(&buffer.m_BufferData[0]), bufSize, 0); // Then receive again!
+				}
+
 				if (result == SOCKET_ERROR) {
 					printf("recv failed with error %d\n", WSAGetLastError());
 					closesocket(listenSocket);
@@ -178,12 +210,17 @@ int main(int arg, char** argv)
 				// We must receive 4 bytes before we know how long the packet actually is
 				// We must receive the entire packet before we can handle the message.
 				// Our protocol says we have a HEADER[pktsize, messagetype];
-				uint32_t packetSize = buffer.ReadUInt32LE();
-				uint32_t messageType = buffer.ReadUInt32LE();
+				uint32_t packetSize = buffer.ReadUInt32BE();
+				uint32_t messageType = buffer.ReadUInt32BE(); // Changed these to BE; reading number values with BE
 
 				if (buffer.m_BufferData.size() >= packetSize)
 				{
 					// We can finally handle our message
+				}
+				else
+				{
+					// Cannot handle message yet, go to next for iteration
+					continue;
 				}
 
 				if (messageType == 1)
@@ -195,6 +232,10 @@ int main(int arg, char** argv)
 					// Must use .c_str() if printing from a std::string, to return as a 'const char*'
 					printf("PacketSize:%d\nMessageType:%d\nMessageLength:%d\nMessage:%s\n", 
 						packetSize, messageType, messageLength, msg.c_str());
+				}
+				else if (messageType == 2) // We will make this a room join/swap request
+				{
+
 				}
 
 				//// https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send
@@ -265,4 +306,38 @@ int main(int arg, char** argv)
 	WSACleanup();
 
 	return 0;
+}
+
+
+int removeFromRoom(SOCKET socket, std::map<int, std::vector<SOCKET>> *roomMap, std::map<SOCKET, UserInfo> *user_Info_map, bool purge) // return
+{
+	std::map<SOCKET, UserInfo>::iterator itInfo = user_Info_map->find(socket); // find userinfo associated with socket
+
+	std::map< int, std::vector<SOCKET>>::iterator itUserVector = roomMap->find(itInfo->second.room); // Find vector associated with that room
+
+	for (unsigned int i = 0; i < itUserVector->second.size(); i++)
+	{
+		if (itUserVector->second[i] == socket)
+		{
+			itUserVector->second.erase(itUserVector->second.begin() + i); // remove from the room
+			break;
+		}
+	}
+	// If we're dealing with a user full disconnecting from the server
+	if (purge)
+		user_Info_map->erase(socket); // Remove from the user to room map
+	else
+		itInfo->second.room = -1;
+
+	return itUserVector->first; // Return room identifier to broadcast user leaving
+}
+
+void addToRoom(SOCKET socket, int room, std::map<int, std::vector<SOCKET>> *roomMap, std::map<SOCKET, int> *user_Room_map)
+{
+	user_Room_map->insert({ socket,room }); // Add info to user-to-room map
+
+	std::map< int, std::vector<SOCKET>>::iterator itUserVector = roomMap->find(room); // Find user vector associated with the desired room
+	itUserVector->second.push_back(socket); // Add socket to the vector
+
+	return;
 }
