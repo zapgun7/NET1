@@ -176,20 +176,38 @@ int main(int arg, char** argv)
 				//		>0: The number of bytes received.
 				int result = recv(socket, (char*)(&buffer.m_BufferData[0]), bufSize, 0);
 
+				//------------------------------------------------CLIENT DISCONNECT-----------------------------------------------------//
 				// Client has disconnected, need to purge their socket from the system
 				if (result == 0)
 				{
-					for (unsigned int i = 0; i < activeConnections.size(); i++)
+					for (unsigned int connIndex = 0; connIndex < activeConnections.size(); connIndex++)
 					{
-						if (activeConnections[i] == socket)
+						if (activeConnections[connIndex] == socket)
 						{
-							activeConnections.erase(activeConnections.begin() + i); // remove from active connections                still gotta remove from room map, should make a function
+							activeConnections.erase(activeConnections.begin() + connIndex); // remove from active connections     
 						}
 					}
-					sessionInfo.removeFromRoom(socket, -1); // Purging user from system                                       !!!!!! must also broadcast to all returned rooms that the person has left
+					std::string username = sessionInfo.getUsername(socket);          // Get user info before we wipe it
+					std::vector<int> userRooms = sessionInfo.getUserRooms(socket);   // So we can send out room leaving notifications
+					sessionInfo.removeFromRoom(socket, -1); // Purging user from system                                
+
+					// Broadcasting to all rooms the user was in
+					ChatMessage msgToBroadcast;
+					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.message = "~SYSTEM~ user [";
+					msgToBroadcast.message += username;  
+					msgToBroadcast.message += "] has left the room.";
+					msgToBroadcast.messageLength = msgToBroadcast.message.length();
+					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+					for (unsigned int roomIndex = 0; roomIndex < userRooms.size(); roomIndex++)
+					{
+						result = broadcast(sessionInfo.getRoomUsers(userRooms[roomIndex]), msgToBroadcast);
+					}
+
 					continue; // Skip rest since the socket has been removed
 				}
-
+				//-------------------------------------------------------------------------------------------------------------//
 
 				// If an error, check if it just a buffer space issue
 				if ((result == SOCKET_ERROR) && (WSAGetLastError() == WSAEMSGSIZE))                           // Can optimize a little by saving the space if we need more than 512, but haven't received all of the message
@@ -245,9 +263,9 @@ int main(int arg, char** argv)
 					// Must braoadcast to all rooms the user is in
 					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
 					
-					for (unsigned int i = 0; i < rooms.size(); i++) // Iterate through all rooms the user sending the message is in
+					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user sending the message is in
 					{
-						 result = broadcast(sessionInfo.getRoomUsers(rooms[i]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+						 result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
 					}
 					// Must use .c_str() if printing from a std::string, to return as a 'const char*'
 // 					printf("PacketSize:%d\nMessageType:%d\nMessageLength:%d\nMessage:%s\n", 
@@ -306,9 +324,9 @@ int main(int arg, char** argv)
 
 					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
 
-					for (unsigned int i = 0; i < rooms.size(); i++) // Iterate through all rooms the user is in to notify name change
+					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user is in to notify name change
 					{
-						result = broadcast(sessionInfo.getRoomUsers(rooms[i]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+						result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
 					}
 				}
 				if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above
