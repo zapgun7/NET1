@@ -10,9 +10,10 @@
 #include <stdio.h>
 
 #include <string>
-#include <thread> // Need it for non-blocking input
+#include <conio.h> // Need it for non-blocking input
 #include <iostream>
 #include <sstream>
+#
 
 #include "buffer.h"
 
@@ -173,14 +174,18 @@ int main(int arg, char** argv)
 
 	// Use a timeval to prevent select from waiting forever.
 	timeval tv;
-	tv.tv_sec = 1;
-	tv.tv_usec = 0;
+	tv.tv_sec = 0;
+	tv.tv_usec = 100;
 
 
 	//std::string* usrMsg = new std::string("");
 	//std::thread th1(userInput, *usrMsg);
 
-
+	std::string commandstarter = "!";
+	std::string userInputBuffer = "";
+	std::string blankLine = "";
+	bool wantsToSend = false;
+	
 	while (true) // The main loop
 	{
 		// set up select stuff like on the server, though can prob just set it up for the one server socket
@@ -191,20 +196,46 @@ int main(int arg, char** argv)
 
 
 		// USER INPUT AREA - VERY BLOCKING
-		std::string usrMsg = "";
-		std::cin >> usrMsg; // Should find a way to make this non-blocking
+		//std::cin >> usrMsg; // Should find a way to make this non-blocking
+		//std::getline(std::cin, usrMsg);
 
-		if (usrMsg.length() > 0) // If user typed SOMETHING at all
+		if (_kbhit()) // If the user types something
+		{
+			int key_hit = _getch();
+			if (key_hit == 8 && userInputBuffer.length() > 0) // Backspace, will remove most recent char from the input buffer
+			{
+				blankLine = "";
+				for (unsigned int i = 0; i < userInputBuffer.length(); i++)
+				{
+					blankLine += " ";
+				}
+				userInputBuffer.erase(userInputBuffer.end() - 1);
+			}
+			else if ((key_hit == 13) && (userInputBuffer.length() > 0)) // User presses enter and has SOMETHING in the input buffer
+			{
+				wantsToSend = true;
+			}
+			else if (key_hit >= 32 && key_hit <= 126) // If within range of valid keys to input to message
+			{
+				userInputBuffer += char(key_hit); // Add single char to the input buffer
+			}
+			std::cout << "\r" << blankLine << "\r" << userInputBuffer; // Blankline clears the line, then new buffer is written
+		}
+
+
+
+
+		if ((wantsToSend) &&(userInputBuffer.length() > 0)) // If user typed SOMETHING at all and has pressed enter
 		{
 			ChatMessage msgToSend;
 			msgToSend.header.messageType = 1; // Message type 1 to client is something to output into their chat window
-			std::string finalMessage = usrMsg;
+			std::string finalMessage = userInputBuffer;
 
 
-			if ((const char*)usrMsg[0] == "!") // If a command: this modifies the message and message type
+			if (userInputBuffer[0] == commandstarter[0]) // If a command: this modifies the message and message type
 			{
 				std::vector<std::string> tokens;
-				std::stringstream check(usrMsg);
+				std::stringstream check(userInputBuffer);
 				std::string intermediate;
 
 				finalMessage = "";
@@ -234,6 +265,10 @@ int main(int arg, char** argv)
 						finalMessage += intermediate + " ";
 					}
 				}
+				else if (intermediate == "!dc") // Completely disconnect user
+				{
+					break; // Exits main loop and cleans up socket stuff, while also notifying server of its disconnect 
+				}          // allowing it to gracefully purge the user from its system
 			}
 
 
@@ -242,6 +277,14 @@ int main(int arg, char** argv)
 			msgToSend.messageLength = msgToSend.message.length();
 			msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 			sendMessage(serverSocket, msgToSend);
+
+			std::cout << "\r"; // Go to beginning of line to prepare clearing it
+			for (unsigned int e = 0; e < userInputBuffer.length(); e++) // Clear the old input line
+			{
+				std::cout << " "; // Replace input buffer with blank space to write new message from server
+			}
+			userInputBuffer = ""; // Reset the user input buffer
+			wantsToSend = false; 
 		}
 
 
@@ -297,10 +340,11 @@ int main(int arg, char** argv)
 			WSACleanup();
 			break;
 		}
-		printf("Received %d bytes from the server!\n", result);
+		//printf("Received %d bytes from the server!\n", result);
 
 		// We must receive 4 bytes before we know how long the packet actually is
-		// We must receive the entire packet before we can handle the message.
+		// We must 
+		//  the entire packet before we can handle the message.
 		// Our protocol says we have a HEADER[pktsize, messagetype];
 		uint32_t packetSize = buffer.ReadUInt32BE();
 
@@ -321,7 +365,14 @@ int main(int arg, char** argv)
 			uint32_t messageLength = buffer.ReadUInt32LE();
 			std::string msg = buffer.ReadString(messageLength);
 
-			printf("%s\n", msg.c_str());
+			//printf("%s\n", msg.c_str());
+			std::cout << "\r";
+			for (unsigned int e = 0; e < userInputBuffer.length(); e++)
+			{
+				std::cout << " "; // Replace input buffer with blank space to write new message from server
+			}
+			std::cout << "\r" << msg << std::endl; // Go to start of line with \r, then write server message
+			std::cout << userInputBuffer; // Write user buffer again
 		}
 
 	}

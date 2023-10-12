@@ -327,7 +327,7 @@ int main(int arg, char** argv)
 					msgToBroadcast.messageLength = msgToBroadcast.message.length();
 					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
 
-					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
+					std::vector<int> rooms = sessionInfo.getUserRooms(socket);     // Add an if that just sends message to user if they're not part of any rooms
 
 					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user is in to notify name change
 					{

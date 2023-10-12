@@ -81,8 +81,13 @@ bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)
 		initVect.push_back(socket); // Add user to the new vector
 		room_map.insert({ room, initVect });
 	}
-	itUserVector->second.push_back(socket); // Room exists, so add socket to the vector
-	itInfo->second.rooms.push_back(room); // Add newly joined room to individual user info
+	else
+	{
+		itUserVector->second.push_back(socket); // Room exists, so add socket to the vector
+		itInfo->second.rooms.push_back(room); // Add newly joined room to individual user info
+	}
+
+	itInfo->second.rooms.push_back(room);
 
 	return true; // Successfully added to room
 }
@@ -147,6 +152,8 @@ bool cUserRoomInfoHandler::setUsername(SOCKET socket, std::string username)  // 
 		// Nope
 		return false;
 	}
+
+	itInfo->second.username = username;
 
 	return true;
 }
