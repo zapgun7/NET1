@@ -80,6 +80,7 @@ bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)
 		std::vector<SOCKET> initVect;
 		initVect.push_back(socket); // Add user to the new vector
 		room_map.insert({ room, initVect });
+		itInfo->second.rooms.push_back(room);
 	}
 	else
 	{
@@ -87,7 +88,7 @@ bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)
 		itInfo->second.rooms.push_back(room); // Add newly joined room to individual user info
 	}
 
-	itInfo->second.rooms.push_back(room);
+	
 
 	return true; // Successfully added to room
 }
