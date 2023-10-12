@@ -10,6 +10,9 @@
 #include <stdio.h>
 
 #include <string>
+#include <thread> // Need it for non-blocking input
+#include <iostream>
+#include <sstream>
 
 #include "buffer.h"
 
@@ -32,6 +35,20 @@ struct ChatMessage
 // First, make it work (messy), then organize
 
 #define DEFAULT_PORT "8412"
+
+// Function signatures
+Buffer buildBuffer(ChatMessage msg);
+int sendMessage(SOCKET socket, ChatMessage msg);
+
+
+void userInput(std::string input)
+{
+	std::string temp;
+	std::cin >> temp;
+	input = temp;
+	return;
+}
+
 
 int main(int arg, char** argv)
 {
@@ -83,7 +100,7 @@ int main(int arg, char** argv)
 		WSACleanup();
 		return 1;
 	}
-	printf("Connect to the server successfully!\n");
+	printf("Connected to the server successfully!\n");
 
 // 	ChatMessage msg;
 // 	msg.message = "hello";
@@ -149,17 +166,189 @@ int main(int arg, char** argv)
 // 
 // 		//printf("Server sent: %s\n", buffer);
 // 	}
+
+	// Set to compare to the one and only Server Socket
+	FD_SET socketsReadyForReading;
+	FD_ZERO(&socketsReadyForReading);
+
+	// Use a timeval to prevent select from waiting forever.
+	timeval tv;
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+
+
+	//std::string* usrMsg = new std::string("");
+	//std::thread th1(userInput, *usrMsg);
+
+
 	while (true) // The main loop
 	{
 		// set up select stuff like on the server, though can prob just set it up for the one server socket
 		// Add non-blocking input for the user, so chat messages can be updated while the user types up a message
-	}
 
+
+
+
+
+		// USER INPUT AREA - VERY BLOCKING
+		std::string usrMsg = "";
+		std::cin >> usrMsg; // Should find a way to make this non-blocking
+
+		if (usrMsg.length() > 0) // If user typed SOMETHING at all
+		{
+			ChatMessage msgToSend;
+			msgToSend.header.messageType = 1; // Message type 1 to client is something to output into their chat window
+			std::string finalMessage = usrMsg;
+
+
+			if ((const char*)usrMsg[0] == "!") // If a command: this modifies the message and message type
+			{
+				std::vector<std::string> tokens;
+				std::stringstream check(usrMsg);
+				std::string intermediate;
+
+				finalMessage = "";
+
+				getline(check, intermediate, ' ');
+				if (intermediate == "!join")          // Join room 
+				{
+					msgToSend.header.messageType = 2;
+					while (getline(check, intermediate, ' ')) // Copy rest of message into new variable (command type is set in the message type)
+					{
+						finalMessage += intermediate + " ";																			    //!!!!!!!!!!!!!!!!!!!! Can we getline with '' rather than ' '?     Test later
+					}
+				}
+				else if (intermediate == "!leave")    // Leave room
+				{
+					msgToSend.header.messageType = 3;
+					while (getline(check, intermediate, ' '))
+					{
+						finalMessage += intermediate + " ";
+					}
+				}
+				else if (intermediate == "!nick")     // Change username
+				{
+					msgToSend.header.messageType = 4;
+					while (getline(check, intermediate, ' '))
+					{
+						finalMessage += intermediate + " ";
+					}
+				}
+			}
+
+
+			msgToSend.message = finalMessage;
+
+			msgToSend.messageLength = msgToSend.message.length();
+			msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+			sendMessage(serverSocket, msgToSend);
+		}
+
+
+
+
+
+
+
+
+		// Reset the socketsReadyForReading
+		FD_ZERO(&socketsReadyForReading);
+
+		// Add server socket to set to check for new messages
+		FD_SET(serverSocket, &socketsReadyForReading);
+
+
+		int count = select(0, &socketsReadyForReading, NULL, NULL, &tv);
+		if (count == 0)
+		{
+			// Timevalue expired
+			continue;
+		}
+		if (count == SOCKET_ERROR)
+		{
+			// Handle an error
+			printf("select had an error %d\n", WSAGetLastError());
+			continue;
+		}
+
+		// Here, assuming our one socket (server) is ready for reading
+
+		const int bufSize = 512;
+		Buffer buffer(bufSize);
+
+		int result = recv(serverSocket, (char*)(&buffer.m_BufferData[0]), bufSize, 0);
+
+		if (result == 0)
+		{
+			// Server has shut down lmao
+		}
+
+		// If an error, check if it just a buffer space issue
+		if ((result == SOCKET_ERROR) && (WSAGetLastError() == WSAEMSGSIZE))                           // Can optimize a little by saving the space if we need more than 512, but haven't received all of the message
+		{
+			Buffer buffer(buffer.ReadUInt32BE()); // Initialize new buffer with exactly enough room
+			result = recv(serverSocket, (char*)(&buffer.m_BufferData[0]), bufSize, 0); // Then receive again!
+		}
+		// If not a space issue
+		if (result == SOCKET_ERROR) {
+			printf("recv failed with error %d\n", WSAGetLastError());
+			closesocket(serverSocket);
+			freeaddrinfo(info);
+			WSACleanup();
+			break;
+		}
+		printf("Received %d bytes from the server!\n", result);
+
+		// We must receive 4 bytes before we know how long the packet actually is
+		// We must receive the entire packet before we can handle the message.
+		// Our protocol says we have a HEADER[pktsize, messagetype];
+		uint32_t packetSize = buffer.ReadUInt32BE();
+
+		if (buffer.m_BufferData.size() >= packetSize)
+		{
+			// We can finally handle our message
+		}
+		else
+		{
+			// Cannot handle message yet, go to next for iteration
+			continue;
+		}
+		uint16_t messageType = buffer.ReadUInt16BE(); // Won't need much space to hold message type
+
+
+		if (messageType == 1) // A message to put into the client's chat window
+		{
+			uint32_t messageLength = buffer.ReadUInt32LE();
+			std::string msg = buffer.ReadString(messageLength);
+
+			printf("%s\n", msg.c_str());
+		}
+
+	}
 
 	// Close
 	freeaddrinfo(info);
-	closesocket(serverSocket);
+	closesocket(serverSocket); // This sends a message to the server announcing user's disconnect
 	WSACleanup();
 
 	return 0;
+}
+
+
+
+int sendMessage(SOCKET socket, ChatMessage msg) // For sending from the broadcast, cuts buffer creation down
+{
+	Buffer buffer = buildBuffer(msg);
+	return send(socket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
+}
+
+Buffer buildBuffer(ChatMessage msg)
+{
+	Buffer buffer(msg.header.packetSize);
+	buffer.WriteUInt32BE(msg.header.packetSize);
+	buffer.WriteUInt16BE(msg.header.messageType);
+	buffer.WriteUInt32LE(msg.messageLength);
+	buffer.WriteString(msg.message);
+
+	return buffer;
 }

@@ -8,6 +8,7 @@
 #include <WS2tcpip.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <iostream>
 
 #include <vector>
 #include <string>
@@ -35,11 +36,11 @@ struct ChatMessage
 	std::string message;
 };
 
-
+// Function Signatures
 int broadcast(std::vector<SOCKET> sockets, ChatMessage msg);
 int sendMessage(SOCKET socket, ChatMessage msg);
 int sendMessage(SOCKET socket, Buffer buffer, int size);
-
+Buffer buildBuffer(ChatMessage msg);
 
 
 std::vector<SOCKET> gClientList;
@@ -154,7 +155,7 @@ int main(int arg, char** argv)
 		{
 			// Handle an error
 			printf("select had an error %d\n", WSAGetLastError());
-			continue;
+			//continue;
 		}
 
 		// Loop through socketsReadyForReading
@@ -245,6 +246,7 @@ int main(int arg, char** argv)
 
 				if (messageType == 1) // Chat message
 				{
+					std::cout << "Basic chat message" << std::endl;
 					// We know this is a ChatMessage
 					uint32_t messageLength = buffer.ReadUInt32LE();
 					std::string msg = buffer.ReadString(messageLength);
@@ -273,11 +275,12 @@ int main(int arg, char** argv)
 				}
 				else if (messageType == 2) // Room join request
 				{
+					std::cout << "Adding user to room" << std::endl;
 					uint32_t room = buffer.ReadUInt32LE();
 					sessionInfo.addToRoom(socket, room); // Add user to the room first
 
 					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.header.messageType = 1;
 					msgToBroadcast.message = "~SYSTEM~ user [";
 					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
 					msgToBroadcast.message += "] has joined the room.";
@@ -288,12 +291,13 @@ int main(int arg, char** argv)
 				}
 				else if (messageType == 3) // Room leave request
 				{
+					std::cout << "Removing user from room" << std::endl;
 					uint32_t room = buffer.ReadUInt32LE();
 					sessionInfo.removeFromRoom(socket, room);
 					
 
 					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.header.messageType = 1;
 					msgToBroadcast.message = "~SYSTEM~ user [";
 					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
 					msgToBroadcast.message += "] has left the room.";
@@ -305,15 +309,16 @@ int main(int arg, char** argv)
 				}
 				else if (messageType == 4) // Username change request
 				{
+					std::cout << "changing username" << std::endl;
 					// Should we broadcast that the user has changed their name?
 					uint32_t usernameLength = buffer.ReadUInt32LE(); // Get username length
 					std::string newName = buffer.ReadString(usernameLength);
 					std::string oldName = sessionInfo.getUsername(socket);
 					sessionInfo.setUsername(socket, newName);
-					///////////////////////////////////////////////  !!!!!!!!!!!!!!!!!!!!!!!! MAYBE BROADCAST TO ROOM?????????
+
 
 					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.header.messageType = 1;
 					msgToBroadcast.message = "~SYSTEM~ user [";
 					msgToBroadcast.message += oldName;     // Add username sending the message to the start of the message
 					msgToBroadcast.message += "] has changed their name to [";
@@ -361,8 +366,10 @@ int main(int arg, char** argv)
 		{
 			if (FD_ISSET(listenSocket, &socketsReadyForReading))
 			{
+				printf("About to accept a new connection\n");
 				// https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-accept
 				SOCKET newConnection = accept(listenSocket, NULL, NULL);
+				printf("Accepted a new connection\n");
 				if (newConnection == INVALID_SOCKET)
 				{
 					// Handle errors
@@ -393,11 +400,12 @@ int main(int arg, char** argv)
 
 
 					ChatMessage msgToSend;
-					msgToSend.header.messageType = 2;
-					msgToSend.message = "~SYSTEM~ Please input a username";
+					msgToSend.header.messageType = 1; // Message type 1 to client is something to output into their chat window
+					msgToSend.message = "~SYSTEM~ Please set a username with !nick";
 
 					msgToSend.messageLength = msgToSend.message.length();
 					msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+					sendMessage(newConnection, msgToSend);
 				}
 			}
 		}

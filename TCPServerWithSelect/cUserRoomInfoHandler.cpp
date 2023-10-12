@@ -133,7 +133,7 @@ std::string cUserRoomInfoHandler::getUsername(SOCKET socket)
 void cUserRoomInfoHandler::initializeUser(SOCKET socket)
 {
 	UserInfo initInfo;
-	initInfo.username = nullptr; // Don't let user enter rooms unless their name doesn't point to null
+	initInfo.username = ""; // Don't let user enter rooms unless their name is something
 
 	userinfo_map.insert({ socket,initInfo });
 }
