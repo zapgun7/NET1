@@ -57,8 +57,6 @@ std::vector<int> cUserRoomInfoHandler::removeFromRoom(SOCKET socket, int roomToL
 	return returnRooms; // Return room identifier(s) to broadcast user leaving
 }
 
-
-
 bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)
 {
 	std::map<SOCKET, UserInfo>::iterator itInfo = userinfo_map.find(socket); // Find user information in map
@@ -89,16 +87,48 @@ bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)
 	return true; // Successfully added to room
 }
 
+
+
 std::vector<SOCKET> cUserRoomInfoHandler::getRoomUsers(int room)
 {
 	std::map<int, std::vector<SOCKET>>::iterator itUserVector = room_map.find(room); // Find user information in map
 	if (itUserVector == room_map.end()) // If room doesn't exist
 	{
 		// Didn't find user information
-		return;
+		std::vector<SOCKET> emptyReturn;
+		return emptyReturn;
 	}
 	return itUserVector->second; // Return vector of users
 }
+
+std::vector<int> cUserRoomInfoHandler::getUserRooms(SOCKET socket)
+{
+	std::map<SOCKET, UserInfo>::iterator itInfo = userinfo_map.find(socket); // Find user information in map
+	if (itInfo == userinfo_map.end())
+	{
+		// Didn't find user information
+		std::vector<int> emptyReturn;
+		return emptyReturn;
+	}
+
+
+	return itInfo->second.rooms;
+}
+
+std::string cUserRoomInfoHandler::getUsername(SOCKET socket)
+{
+	std::map<SOCKET, UserInfo>::iterator itInfo = userinfo_map.find(socket); // Find user information in map
+	if (itInfo == userinfo_map.end())
+	{
+		// Didn't find user information
+		std::string emptyReturn = "";
+		return emptyReturn;
+	}
+
+	return itInfo->second.username;
+}
+
+
 
 void cUserRoomInfoHandler::initializeUser(SOCKET socket)
 {

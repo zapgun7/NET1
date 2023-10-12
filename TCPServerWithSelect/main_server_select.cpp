@@ -36,6 +36,12 @@ struct ChatMessage
 };
 
 
+int broadcast(std::vector<SOCKET> sockets, ChatMessage msg);
+int sendMessage(SOCKET socket, ChatMessage msg);
+int sendMessage(SOCKET socket, Buffer buffer, int size);
+
+
+
 std::vector<SOCKET> gClientList;
 
 int main(int arg, char** argv)
@@ -107,7 +113,7 @@ int main(int arg, char** argv)
 
 
 	std::vector<SOCKET> activeConnections;
-	cUserRoomInfoHandler sessionInfo;
+	cUserRoomInfoHandler sessionInfo; // Class variable to keep track of all room and user related information
 
 	FD_SET activeSockets;				// List of all of the clients ready to read.
 	FD_SET socketsReadyForReading;		// List of all of the connections
@@ -180,7 +186,7 @@ int main(int arg, char** argv)
 							activeConnections.erase(activeConnections.begin() + i); // remove from active connections                still gotta remove from room map, should make a function
 						}
 					}
-					sessionInfo.removeFromRoom(socket, -1); // Purging user from system
+					sessionInfo.removeFromRoom(socket, -1); // Purging user from system                                       !!!!!! must also broadcast to all returned rooms that the person has left
 					continue; // Skip rest since the socket has been removed
 				}
 
@@ -206,7 +212,7 @@ int main(int arg, char** argv)
 				// We must receive the entire packet before we can handle the message.
 				// Our protocol says we have a HEADER[pktsize, messagetype];
 				uint32_t packetSize = buffer.ReadUInt32BE();
-				uint32_t messageType = buffer.ReadUInt32BE(); // Changed these to BE; reading number values with BE
+				
 
 				if (buffer.m_BufferData.size() >= packetSize)
 				{
@@ -217,20 +223,101 @@ int main(int arg, char** argv)
 					// Cannot handle message yet, go to next for iteration
 					continue;
 				}
+				uint16_t messageType = buffer.ReadUInt16BE(); // Won't need much space to hold message type
 
-				if (messageType == 1)
+				if (messageType == 1) // Chat message
 				{
 					// We know this is a ChatMessage
 					uint32_t messageLength = buffer.ReadUInt32LE();
 					std::string msg = buffer.ReadString(messageLength);
 
-					// Must use .c_str() if printing from a std::string, to return as a 'const char*'
-					printf("PacketSize:%d\nMessageType:%d\nMessageLength:%d\nMessage:%s\n", 
-						packetSize, messageType, messageLength, msg.c_str());
-				}
-				else if (messageType == 2) // We will make this a room join/swap request
-				{
 
+					ChatMessage msgToBroadcast;
+					//msgToBroadcast.header.packetSize = messageLength;
+					msgToBroadcast.header.messageType = 1;
+					msgToBroadcast.message = "[";
+					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+					msgToBroadcast.message += "] ";
+					msgToBroadcast.message += msg;                               
+					msgToBroadcast.messageLength = msgToBroadcast.message.length();
+					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+					// Must braoadcast to all rooms the user is in
+					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
+					
+					for (unsigned int i = 0; i < rooms.size(); i++) // Iterate through all rooms the user sending the message is in
+					{
+						 result = broadcast(sessionInfo.getRoomUsers(rooms[i]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+					}
+					// Must use .c_str() if printing from a std::string, to return as a 'const char*'
+// 					printf("PacketSize:%d\nMessageType:%d\nMessageLength:%d\nMessage:%s\n", 
+// 						packetSize, messageType, messageLength, msg.c_str());
+				}
+				else if (messageType == 2) // Room join request
+				{
+					uint32_t room = buffer.ReadUInt32LE();
+					sessionInfo.addToRoom(socket, room); // Add user to the room first
+
+					ChatMessage msgToBroadcast;
+					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.message = "~SYSTEM~ user [";
+					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+					msgToBroadcast.message += "] has joined the room.";
+					msgToBroadcast.messageLength = msgToBroadcast.message.length();
+					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+					result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast);
+				}
+				else if (messageType == 3) // Room leave request
+				{
+					uint32_t room = buffer.ReadUInt32LE();
+					sessionInfo.removeFromRoom(socket, room);
+					
+
+					ChatMessage msgToBroadcast;
+					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.message = "~SYSTEM~ user [";
+					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+					msgToBroadcast.message += "] has left the room.";
+					msgToBroadcast.messageLength = msgToBroadcast.message.length();
+					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+					result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast);
+					
+				}
+				else if (messageType == 4) // Username change request
+				{
+					// Should we broadcast that the user has changed their name?
+					uint32_t usernameLength = buffer.ReadUInt32LE(); // Get username length
+					std::string newName = buffer.ReadString(usernameLength);
+					std::string oldName = sessionInfo.getUsername(socket);
+					sessionInfo.setUsername(socket, newName);
+					///////////////////////////////////////////////  !!!!!!!!!!!!!!!!!!!!!!!! MAYBE BROADCAST TO ROOM?????????
+
+					ChatMessage msgToBroadcast;
+					msgToBroadcast.header.messageType = 2;
+					msgToBroadcast.message = "~SYSTEM~ user [";
+					msgToBroadcast.message += oldName;     // Add username sending the message to the start of the message
+					msgToBroadcast.message += "] has changed their name to [";
+					msgToBroadcast.message += newName;
+					msgToBroadcast.message += "].";
+					msgToBroadcast.messageLength = msgToBroadcast.message.length();
+					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
+
+					for (unsigned int i = 0; i < rooms.size(); i++) // Iterate through all rooms the user is in to notify name change
+					{
+						result = broadcast(sessionInfo.getRoomUsers(rooms[i]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+					}
+				}
+				if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above
+				{
+					printf("send failed with error %d\n", WSAGetLastError());
+					closesocket(listenSocket);
+					freeaddrinfo(info);
+					WSACleanup();
+					break;
 				}
 
 				//// https://learn.microsoft.com/en-us/windows/win32/api/winsock2/nf-winsock2-send
@@ -279,11 +366,20 @@ int main(int arg, char** argv)
 
 					// Handle successful connection
 					activeConnections.push_back(newConnection);
-					sessionInfo.initializeUser(newConnection); // Add new user to the "database"
+					sessionInfo.initializeUser(newConnection); // Add new user to the "database"                                                 !!! must prompt the user to enter their username
 					FD_SET(newConnection, &activeSockets);
 					FD_CLR(listenSocket, &socketsReadyForReading);
 
+
 					printf("Client connected with Socket: %d\n", (int)newConnection);
+
+
+					ChatMessage msgToSend;
+					msgToSend.header.messageType = 2;
+					msgToSend.message = "~SYSTEM~ Please input a username";
+
+					msgToSend.messageLength = msgToSend.message.length();
+					msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 				}
 			}
 		}
@@ -302,4 +398,48 @@ int main(int arg, char** argv)
 	WSACleanup();
 
 	return 0;
+}
+
+int broadcast(std::vector<SOCKET> sockets, ChatMessage msg) // Send to a bunch of rooms; just calls sendMessage a bunch
+{
+	int errorInt = 0;
+	int tempInt;
+	Buffer buffer = buildBuffer(msg);
+// 	buffer.WriteUInt32BE(msg.header.packetSize);
+// 	buffer.WriteUInt16BE(msg.header.messageType);
+// 	buffer.WriteUInt32LE(msg.messageLength);
+// 	buffer.WriteString(msg.message);
+
+
+	for (unsigned int i = 0; i < sockets.size(); i++)
+	{
+		tempInt = sendMessage(sockets[i], buffer, msg.header.packetSize);
+		 errorInt = errorInt > tempInt ? tempInt:errorInt;
+	}
+	return errorInt;
+}
+int sendMessage(SOCKET socket, ChatMessage msg) // Send to one user
+{                                                // ChatMessage will be fully filled out
+	Buffer buffer = buildBuffer(msg);
+// 	buffer.WriteUInt32BE(msg.header.packetSize);
+// 	buffer.WriteUInt16BE(msg.header.messageType);
+// 	buffer.WriteUInt32LE(msg.messageLength);
+// 	buffer.WriteString(msg.message);
+
+	return sendMessage(socket, buffer, msg.header.packetSize);
+}
+int sendMessage(SOCKET socket, Buffer buffer, int size) // For sending from the broadcast, cuts buffer creation down
+{
+	return send(socket, (const char*)(&buffer.m_BufferData[0]), size, 0);
+}
+
+Buffer buildBuffer(ChatMessage msg)
+{
+	Buffer buffer(msg.header.packetSize);
+	buffer.WriteUInt32BE(msg.header.packetSize);
+	buffer.WriteUInt16BE(msg.header.messageType);
+	buffer.WriteUInt32LE(msg.messageLength);
+	buffer.WriteString(msg.message);
+
+	return buffer;
 }

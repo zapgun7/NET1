@@ -20,10 +20,12 @@ public:
 
 	// Room actions
 	std::vector<int> removeFromRoom(SOCKET socket, int roomToLeave);   // Should probably split this in 2 (remove from room and purge user)
-	bool addToRoom(SOCKET socket, int room);
+	bool addToRoom(SOCKET socket, int room); // Add a user to a room
 
 	//Getters
-	std::vector<SOCKET> getRoomUsers(int room);
+	std::vector<SOCKET> getRoomUsers(int room); // Returns users in provided room
+	std::vector<int> getUserRooms(SOCKET socket); // Returns rooms the provided user is in
+	std::string getUsername(SOCKET socket); // Returns the username related to the given socket
 
 	// Initializers/setters
 	void initializeUser(SOCKET socket);

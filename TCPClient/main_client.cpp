@@ -85,70 +85,76 @@ int main(int arg, char** argv)
 	}
 	printf("Connect to the server successfully!\n");
 
-	ChatMessage msg;
-	msg.message = "hello";
-	msg.messageLength = msg.message.length();
-	msg.header.messageType = 1;// Can use an enum to determine this
-	msg.header.packetSize =
-		msg.message.length()				// 5 'hello' has 5 bytes in it
-		+ sizeof(msg.messageLength)			// 4, uint32_t is 4 bytes
-		+ sizeof(msg.header.messageType)	// 4, uint32_t is 4 bytes
-		+ sizeof(msg.header.packetSize);	// 4, uint32_t is 4 bytes
-	// 5 + 4 + 4 + 4 = 17
+// 	ChatMessage msg;
+// 	msg.message = "hello";
+// 	msg.messageLength = msg.message.length();
+// 	msg.header.messageType = 1;// Can use an enum to determine this
+// 	msg.header.packetSize =
+// 		msg.message.length()				// 5 'hello' has 5 bytes in it
+// 		+ sizeof(msg.messageLength)			// 4, uint32_t is 4 bytes
+// 		+ sizeof(msg.header.messageType)	// 4, uint32_t is 4 bytes
+// 		+ sizeof(msg.header.packetSize);	// 4, uint32_t is 4 bytes
+// 	// 5 + 4 + 4 + 4 = 17
+// 
+// 	const int bufSize = 512;
+// 	Buffer buffer(bufSize);
+// 
+// 	// Write our packet to the buffer
+// 	buffer.WriteUInt32LE(msg.header.packetSize);	// should be 17
+// 	buffer.WriteUInt32LE(msg.header.messageType);	// 1
+// 	buffer.WriteUInt32LE(msg.messageLength);		// 5
+// 	buffer.WriteString(msg.message);				// hello
 
-	const int bufSize = 512;
-	Buffer buffer(bufSize);
-
-	// Write our packet to the buffer
-	buffer.WriteUInt32LE(msg.header.packetSize);	// should be 17
-	buffer.WriteUInt32LE(msg.header.messageType);	// 1
-	buffer.WriteUInt32LE(msg.messageLength);		// 5
-	buffer.WriteString(msg.message);				// hello
-
-	for (int i = 0; i < 5; i++)
+// 	for (int i = 0; i < 5; i++)
+// 	{
+// 		// Write
+// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
+// 		if (result == SOCKET_ERROR) {
+// 			printf("send failed with error %d\n", WSAGetLastError());
+// 			closesocket(serverSocket);
+// 			freeaddrinfo(info);
+// 			WSACleanup();
+// 			return 1;
+// 		}
+// 		// Write
+// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
+// 		if (result == SOCKET_ERROR) {
+// 			printf("send failed with error %d\n", WSAGetLastError());
+// 			closesocket(serverSocket);
+// 			freeaddrinfo(info);
+// 			WSACleanup();
+// 			return 1;
+// 		}
+// 		// Write
+// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
+// 		if (result == SOCKET_ERROR) {
+// 			printf("send failed with error %d\n", WSAGetLastError());
+// 			closesocket(serverSocket);
+// 			freeaddrinfo(info);
+// 			WSACleanup();
+// 			return 1;
+// 		}
+// 
+// 		//// Read
+// 		//result = recv(serverSocket, buffer, 512, 0);
+// 		//if (result == SOCKET_ERROR) {
+// 		//	printf("recv failed with error %d\n", WSAGetLastError());
+// 		//	closesocket(serverSocket);
+// 		//	freeaddrinfo(info);
+// 		//	WSACleanup();
+// 		//	return 1;
+// 		//}
+// 
+// 		system("Pause"); // Force the user to press enter to continue;
+// 
+// 		//printf("Server sent: %s\n", buffer);
+// 	}
+	while (true) // The main loop
 	{
-		// Write
-		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-		if (result == SOCKET_ERROR) {
-			printf("send failed with error %d\n", WSAGetLastError());
-			closesocket(serverSocket);
-			freeaddrinfo(info);
-			WSACleanup();
-			return 1;
-		}
-		// Write
-		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-		if (result == SOCKET_ERROR) {
-			printf("send failed with error %d\n", WSAGetLastError());
-			closesocket(serverSocket);
-			freeaddrinfo(info);
-			WSACleanup();
-			return 1;
-		}
-		// Write
-		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-		if (result == SOCKET_ERROR) {
-			printf("send failed with error %d\n", WSAGetLastError());
-			closesocket(serverSocket);
-			freeaddrinfo(info);
-			WSACleanup();
-			return 1;
-		}
-
-		//// Read
-		//result = recv(serverSocket, buffer, 512, 0);
-		//if (result == SOCKET_ERROR) {
-		//	printf("recv failed with error %d\n", WSAGetLastError());
-		//	closesocket(serverSocket);
-		//	freeaddrinfo(info);
-		//	WSACleanup();
-		//	return 1;
-		//}
-
-		system("Pause"); // Force the user to press enter to continue;
-
-		//printf("Server sent: %s\n", buffer);
+		// set up select stuff like on the server, though can prob just set it up for the one server socket
+		// Add non-blocking input for the user, so chat messages can be updated while the user types up a message
 	}
+
 
 	// Close
 	freeaddrinfo(info);

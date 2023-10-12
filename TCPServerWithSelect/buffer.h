@@ -103,7 +103,7 @@ public:
 	std::string ReadString(uint32_t length)
 	{
 		std::string str;
-		for (int i = 0; i < length; i++)
+		for (unsigned int i = 0; i < length; i++)
 		{
 			str.push_back(m_BufferData[m_ReadIndex++]);
 		}
