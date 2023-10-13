@@ -13,6 +13,12 @@ public:
 	}
 	~Buffer() { }
 
+	void reSize(int size)
+	{
+		m_BufferData.resize(size);
+		return;
+	}
+
 	uint32_t ReadUInt32LE()
 	{
 		uint32_t value = 0;

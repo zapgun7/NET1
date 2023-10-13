@@ -13,6 +13,12 @@ public:
 	}
 	~Buffer() { }
 
+	void reSize(int size)
+	{
+		m_BufferData.resize(size);
+		return;
+	}
+
 	uint32_t ReadUInt32LE()
 	{
 		uint32_t value = 0;
@@ -103,7 +109,7 @@ public:
 	std::string ReadString(uint32_t length)
 	{
 		std::string str;
-		for (unsigned int i = 0; i < length; i++)
+		for (int i = 0; i < length; i++)
 		{
 			str.push_back(m_BufferData[m_ReadIndex++]);
 		}

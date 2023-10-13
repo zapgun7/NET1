@@ -13,7 +13,7 @@ cUserRoomInfoHandler::~cUserRoomInfoHandler()
 
 
 
-std::vector<int> cUserRoomInfoHandler::removeFromRoom(SOCKET socket, int roomToLeave)
+bool cUserRoomInfoHandler::removeFromRoom(SOCKET socket, int roomToLeave)
 {
 	std::vector<int> returnRooms;
 	int singleRoomToErase = -1;
@@ -51,10 +51,12 @@ std::vector<int> cUserRoomInfoHandler::removeFromRoom(SOCKET socket, int roomToL
 	// If we're dealing with a user full disconnecting from the server
 	if (roomToLeave == -1)
 		userinfo_map.erase(socket); // Remove user from the userinfo map
-	else
+	else if (singleRoomToErase != -1)
 		itInfo->second.rooms.erase(itInfo->second.rooms.begin() + singleRoomToErase); // Remove the single room from the user's active rooms
+	else
+		return false; // User not in the room 
 
-	return returnRooms; // Return room identifier(s) to broadcast user leaving
+	return true; // Return room identifier(s) to broadcast user leaving
 }
 
 bool cUserRoomInfoHandler::addToRoom(SOCKET socket, int room)

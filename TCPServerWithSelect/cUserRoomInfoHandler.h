@@ -19,7 +19,7 @@ public:
 	~cUserRoomInfoHandler();
 
 	// Room actions
-	std::vector<int> removeFromRoom(SOCKET socket, int roomToLeave);   // Should probably split this in 2 (remove from room and purge user)
+	bool removeFromRoom(SOCKET socket, int roomToLeave);   // Should probably split this in 2 (remove from room and purge user)
 	bool addToRoom(SOCKET socket, int room); // Add a user to a room
 
 	//Getters

@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <iostream>
+#include <sstream>
 
 #include <vector>
 #include <string>
@@ -127,6 +128,20 @@ int main(int arg, char** argv)
 	tv.tv_sec = 1;
 	tv.tv_usec = 0;
 
+	std::string finalMessage = ""; // For parsing user commands
+	std::string const systemSignature = "~{System}~ ";
+	std::string const welcome = "Welcome to my little chat program :)  Start your session by setting your nickname with !nick [name] and use !help to view all commands. Enjoy!";//
+	std::string commands =  "///////////////////////////////////////////////////////////////////////////////////////////////////\n";
+	commands +=             "/////  !help           Displays all available commands and their syntax                       /////\n";
+	commands +=				"/////  !nick name      Sets the user's nickname as name; must set this to join rooms          /////\n";
+	commands +=				"/////  !join room#     Attempts to join the specified room number (rooms can only be numbers) /////\n";
+	commands +=				"/////                  If the room doesn't exist, it will create one with the provided number /////\n";
+	commands +=				"/////  !leave room#    Leaves the specified room, room#, if the user is in it                 /////\n";
+	commands +=				"/////  !dc             Disconnects and terminates the user, effectively closing the client    /////\n";
+	commands +=				"///////////////////////////////////////////////////////////////////////////////////////////////////\n";
+
+							
+
 	while (true)
 	{
 		// Reset the socketsReadyForReading
@@ -194,8 +209,8 @@ int main(int arg, char** argv)
 
 					// Broadcasting to all rooms the user was in
 					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 2;
-					msgToBroadcast.message = "~SYSTEM~ user [";
+					msgToBroadcast.header.messageType = 1;
+					msgToBroadcast.message = systemSignature + "user [";
 					msgToBroadcast.message += username;  
 					msgToBroadcast.message += "] has left the room.";
 					msgToBroadcast.messageLength = msgToBroadcast.message.length();
@@ -273,65 +288,210 @@ int main(int arg, char** argv)
 // 					printf("PacketSize:%d\nMessageType:%d\nMessageLength:%d\nMessage:%s\n", 
 // 						packetSize, messageType, messageLength, msg.c_str());
 				}
-				else if (messageType == 2) // Room join request
+				else if (messageType == 2) // User calls a command
 				{
-					std::cout << "Adding user to room" << std::endl;
-					uint32_t room = buffer.ReadUInt32LE();
-					sessionInfo.addToRoom(socket, room); // Add user to the room first
-
-					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 1;
-					msgToBroadcast.message = "~SYSTEM~ user [";
-					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
-					msgToBroadcast.message += "] has joined the room.";
-					msgToBroadcast.messageLength = msgToBroadcast.message.length();
-					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-
-					result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast);
-				}
-				else if (messageType == 3) // Room leave request
-				{
-					std::cout << "Removing user from room" << std::endl;
-					uint32_t room = buffer.ReadUInt32LE();
-					sessionInfo.removeFromRoom(socket, room);
-					
-
-					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 1;
-					msgToBroadcast.message = "~SYSTEM~ user [";
-					msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
-					msgToBroadcast.message += "] has left the room.";
-					msgToBroadcast.messageLength = msgToBroadcast.message.length();
-					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-
-					result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast);
-					
-				}
-				else if (messageType == 4) // Username change request
-				{
-					std::cout << "changing username" << std::endl;
-					// Should we broadcast that the user has changed their name?
-					uint32_t usernameLength = buffer.ReadUInt32LE(); // Get username length
-					std::string newName = buffer.ReadString(usernameLength);
-					std::string oldName = sessionInfo.getUsername(socket);
-					sessionInfo.setUsername(socket, newName);
+					uint32_t messageLength = buffer.ReadUInt32LE();
+					std::string msg = buffer.ReadString(messageLength);
 
 
-					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 1;
-					msgToBroadcast.message = "~SYSTEM~ user [";
-					msgToBroadcast.message += oldName;     // Add username sending the message to the start of the message
-					msgToBroadcast.message += "] has changed their name to [";
-					msgToBroadcast.message += newName;
-					msgToBroadcast.message += "].";
-					msgToBroadcast.messageLength = msgToBroadcast.message.length();
-					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+					std::vector<std::string> tokens;
+					std::stringstream check(msg);
+					std::string intermediate;
 
-					std::vector<int> rooms = sessionInfo.getUserRooms(socket);     // Add an if that just sends message to user if they're not part of any rooms
+					finalMessage = "";
 
-					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user is in to notify name change
+					getline(check, intermediate, ' ');
+					if (intermediate == "!join")          // Join room 
 					{
-						result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+						messageType = 2; // Reuse message type for following set of if else's
+						(getline(check, intermediate, ' '));
+						finalMessage += intermediate;              // Add the first one without the space before it
+						while (getline(check, intermediate, ' ')) 
+						{
+							finalMessage += " " + intermediate;		// Add a space before each subsequent token							    //!!!!!!!!!!!!!!!!!!!! Can we getline with '' rather than ' '?     Test later
+						}
+					}
+					else if (intermediate == "!leave")    // Leave room
+					{
+						messageType = 3;
+						(getline(check, intermediate, ' '));
+						finalMessage += intermediate;
+						while (getline(check, intermediate, ' '))
+						{
+							finalMessage += " " + intermediate;
+						}
+					}
+					else if (intermediate == "!nick")     // Change username
+					{
+						messageType = 4;
+						(getline(check, intermediate, ' '));
+						finalMessage += intermediate; 
+						while (getline(check, intermediate, ' '))
+						{
+							finalMessage += " " + intermediate;
+						}
+					}
+					else if (intermediate == "!help")    // Requesting commands
+					{
+						messageType = 50;     // TOMDO (to maybe do)     Depending on what comes after !help, provide specific info on the command (i.e. '!help join' would give extra details on the join command)
+					}
+					else
+					{
+						messageType = 51;
+					}
+					// 					else if (intermediate == "!dc") // Completely disconnect user
+					// 					{
+					// 						break; // Exits main loop and cleans up socket stuff, while also notifying server of its disconnect 
+					// 					}          // allowing it to gracefully purge the user from its system
+
+					if (messageType == 2) // Room join request
+					{
+						bool isValidInput = true;
+						std::cout << "Adding user to room" << std::endl;
+						// Make sure finalMessage contains valid int for conversion //
+						for (unsigned int c = 0; c < finalMessage.length(); c++)
+						{
+							if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+							{
+								isValidInput = false;
+							}
+						}
+
+
+						if (isValidInput)// Proven valid
+						{
+							int room = stoi(finalMessage);                                                                          // TODO maybe should check if this is a valid number before conversion
+							sessionInfo.addToRoom(socket, room); // Add user to the room first
+
+							ChatMessage msgToBroadcast;
+							msgToBroadcast.header.messageType = 1;
+							msgToBroadcast.message = systemSignature + "user [";
+							msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+							msgToBroadcast.message += "] has joined the room.";
+							msgToBroadcast.messageLength = msgToBroadcast.message.length();
+							msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+
+							result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast);
+						}
+						else // Invalid input, notify user
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "ERROR: Invalid Room | please use only numbers with no spaces :)";
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(socket, msgToSend);
+						}
+					}
+					else if (messageType == 3) // Room leave request
+					{
+						bool isValidInput = true;
+						std::cout << "Removing user from room" << std::endl;
+
+						for (unsigned int c = 0; c < finalMessage.length(); c++)
+						{
+							if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+							{
+								isValidInput = false;
+							}
+						}
+
+						if (isValidInput)
+						{
+							//uint32_t room = buffer.ReadUInt32LE();
+							int room = stoi(finalMessage);
+							if (sessionInfo.removeFromRoom(socket, room)) // If the user was successfully removed from the specified room
+							{
+								ChatMessage msgToBroadcast;
+								msgToBroadcast.header.messageType = 1;
+								msgToBroadcast.message = systemSignature + "user [";
+								msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+								msgToBroadcast.message += "] has left the room.";
+								msgToBroadcast.messageLength = msgToBroadcast.message.length();
+								msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+								result = broadcast(sessionInfo.getRoomUsers(room), msgToBroadcast); // Broad cast to the room about the success
+							}
+							else // If the user was not found to be in the room
+							{
+								ChatMessage msgToSend;
+								msgToSend.header.messageType = 1;
+								msgToSend.message = systemSignature + "you are not in this room.";
+								//msgToBroadcast.message += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+								//msgToBroadcast.message += "] has left the room.";
+								msgToSend.messageLength = msgToSend.message.length();
+								msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+								result = sendMessage(socket, msgToSend);   // Send the failure notification to just the user 
+							}
+						}
+						else // Invalid input, notify user
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "ERROR: Invalid Room | please use only numbers with no spaces :)";
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(socket, msgToSend);
+						}
+					}
+					else if (messageType == 4) // Username change request
+					{
+						std::cout << "changing username" << std::endl;
+						// Should we broadcast that the user has changed their name?
+						//uint32_t usernameLength = buffer.ReadUInt32LE(); // Get username length
+						//std::string newName = buffer.ReadString(usernameLength);
+						std::string newName = finalMessage;
+						std::string oldName = sessionInfo.getUsername(socket);
+						sessionInfo.setUsername(socket, newName);
+
+						std::vector<int> rooms = sessionInfo.getUserRooms(socket); // Get user's rooms up here to branch off into 2 conditions (in 1+ rooms || in no rooms)
+						if (!rooms.empty()) // User is in at least one room
+						{
+							ChatMessage msgToBroadcast;
+							msgToBroadcast.header.messageType = 1;
+							msgToBroadcast.message = systemSignature + "user [";
+							msgToBroadcast.message += oldName;     // Add username sending the message to the start of the message
+							msgToBroadcast.message += "] has changed their name to [";
+							msgToBroadcast.message += newName;
+							msgToBroadcast.message += "].";
+							msgToBroadcast.messageLength = msgToBroadcast.message.length();
+							msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+							for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user is in to notify name change
+							{
+								result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+							}
+						}
+						else // User is not in any rooms
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "you are now known as [";
+							msgToSend.message += newName;
+							msgToSend.message += "]";
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(socket, msgToSend);
+						}
+
+						
+
+					}
+					else if (messageType == 50)   // TODO NOT WORKING, suspect is buffer resize on client's end
+					{
+						std::cout << "Sending Help\n";
+						ChatMessage msgToSend;
+						msgToSend.header.messageType = 1;
+						msgToSend.message = commands;
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+						result = sendMessage(socket, msgToSend);
+					}
+					else if (messageType == 51)
+					{
+						// TODO inform user they have typed in an invalid command, suggest !help for list of commands
 					}
 				}
 				if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above
@@ -391,7 +551,7 @@ int main(int arg, char** argv)
 
 					// Handle successful connection
 					activeConnections.push_back(newConnection);
-					sessionInfo.initializeUser(newConnection); // Add new user to the "database"                                                 !!! must prompt the user to enter their username
+					sessionInfo.initializeUser(newConnection); // Add new user to the "database" 
 					FD_SET(newConnection, &activeSockets);
 					FD_CLR(listenSocket, &socketsReadyForReading);
 
@@ -399,9 +559,9 @@ int main(int arg, char** argv)
 					printf("Client connected with Socket: %d\n", (int)newConnection);
 
 
-					ChatMessage msgToSend;
+					ChatMessage msgToSend;                                                                                       // INITIAL MESSAGE TO NEW USERS     TODO should we also output just !help or the entirety
 					msgToSend.header.messageType = 1; // Message type 1 to client is something to output into their chat window
-					msgToSend.message = "~SYSTEM~ Please set a username with !nick";
+					msgToSend.message = systemSignature + welcome;
 
 					msgToSend.messageLength = msgToSend.message.length();
 					msgToSend.header.packetSize = 10 + msgToSend.messageLength;

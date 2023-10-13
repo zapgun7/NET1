@@ -234,52 +234,55 @@ int main(int arg, char** argv)
 
 			if (userInputBuffer[0] == commandstarter[0]) // If a command: this modifies the message and message type
 			{
+				msgToSend.header.messageType = 2; // Let the server know the message is a command (or an attempt at one)
 				std::vector<std::string> tokens;
 				std::stringstream check(userInputBuffer);
 				std::string intermediate;
 
-				finalMessage = "";
-
 				getline(check, intermediate, ' ');
-				if (intermediate == "!join")          // Join room 
-				{
-					msgToSend.header.messageType = 2;
-					while (getline(check, intermediate, ' ')) // Copy rest of message into new variable (command type is set in the message type)
-					{
-						finalMessage += intermediate + " ";																			    //!!!!!!!!!!!!!!!!!!!! Can we getline with '' rather than ' '?     Test later
-					}
-				}
-				else if (intermediate == "!leave")    // Leave room
-				{
-					msgToSend.header.messageType = 3;
-					while (getline(check, intermediate, ' '))
-					{
-						finalMessage += intermediate + " ";
-					}
-				}
-				else if (intermediate == "!nick")     // Change username
-				{
-					msgToSend.header.messageType = 4;
-					while (getline(check, intermediate, ' '))
-					{
-						finalMessage += intermediate + " ";
-					}
-				}
-				else if (intermediate == "!dc") // Completely disconnect user
+// 				if (intermediate == "!join")          // Join room 
+// 				{
+// 					msgToSend.header.messageType = 2;
+// 					while (getline(check, intermediate, ' ')) // Copy rest of message into new variable (command type is set in the message type)
+// 					{
+// 						finalMessage += intermediate + " ";																			    //!!!!!!!!!!!!!!!!!!!! Can we getline with '' rather than ' '?     Test later
+// 					}
+// 				}
+// 				else if (intermediate == "!leave")    // Leave room
+// 				{
+// 					msgToSend.header.messageType = 3;
+// 					while (getline(check, intermediate, ' '))
+// 					{
+// 						finalMessage += intermediate + " ";
+// 					}
+// 				}
+// 				else if (intermediate == "!nick")     // Change username
+// 				{
+// 					msgToSend.header.messageType = 4;
+// 					while (getline(check, intermediate, ' '))
+// 					{
+// 						finalMessage += intermediate + " ";
+// 					}
+// 				}
+// 				else if (intermediate == "!help")    // Requesting commands
+// 				{
+// 
+// 				}
+				if (intermediate == "!dc") // Completely disconnect user
 				{
 					break; // Exits main loop and cleans up socket stuff, while also notifying server of its disconnect 
 				}          // allowing it to gracefully purge the user from its system
 			}
 
 
-			msgToSend.message = finalMessage;
+			msgToSend.message = userInputBuffer;
 
 			msgToSend.messageLength = msgToSend.message.length();
 			msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 			sendMessage(serverSocket, msgToSend);
 
 			std::cout << "\r"; // Go to beginning of line to prepare clearing it
-			for (unsigned int e = 0; e < userInputBuffer.length(); e++) // Clear the old input line
+			for (unsigned int e = 0; e < userInputBuffer.length(); e++) // Clear the old input line (cause we just sent it to the server)
 			{
 				std::cout << " "; // Replace input buffer with blank space to write new message from server
 			}
@@ -327,7 +330,7 @@ int main(int arg, char** argv)
 		}
 
 		// If an error, check if it just a buffer space issue
-		if ((result == SOCKET_ERROR) && (WSAGetLastError() == WSAEMSGSIZE))                           // Can optimize a little by saving the space if we need more than 512, but haven't received all of the message
+		if ((result == SOCKET_ERROR) && (WSAGetLastError() == WSAEMSGSIZE))// Doesn't trigger when buffer isn't big enough???          // Can optimize a little by saving the space if we need more than 512, but haven't received all of the message
 		{
 			Buffer buffer(buffer.ReadUInt32BE()); // Initialize new buffer with exactly enough room
 			result = recv(serverSocket, (char*)(&buffer.m_BufferData[0]), bufSize, 0); // Then receive again!
@@ -346,7 +349,14 @@ int main(int arg, char** argv)
 		// We must 
 		//  the entire packet before we can handle the message.
 		// Our protocol says we have a HEADER[pktsize, messagetype];
+
+
 		uint32_t packetSize = buffer.ReadUInt32BE();
+		if (packetSize > buffer.m_BufferData.size()) // If buffer isn't big enought to fit packet
+		{
+			buffer.reSize(packetSize); // Initialize new buffer with exactly enough room
+			result = recv(serverSocket, (char*)(&buffer.m_BufferData[512]), bufSize, 0); // Then receive the rest
+		}
 
 		if (buffer.m_BufferData.size() >= packetSize)
 		{
