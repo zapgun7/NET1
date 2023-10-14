@@ -13,7 +13,7 @@
 #include <conio.h> // Need it for non-blocking input
 #include <iostream>
 #include <sstream>
-#
+#include <ConsoleApi.h> // Need it for dealing with closing console window with the X button
 
 #include "buffer.h"
 
@@ -41,14 +41,8 @@ struct ChatMessage
 Buffer buildBuffer(ChatMessage msg);
 int sendMessage(SOCKET socket, ChatMessage msg);
 
-
-void userInput(std::string input)
-{
-	std::string temp;
-	std::cin >> temp;
-	input = temp;
-	return;
-}
+SOCKET serverSocket;
+struct addrinfo* info;
 
 
 int main(int arg, char** argv)
@@ -65,7 +59,7 @@ int main(int arg, char** argv)
 	}
 	printf("WSAStartup successfully!\n");
 
-	struct addrinfo* info = nullptr;
+	/*struct addrinfo* */info = nullptr;
 	struct addrinfo hints;
 	ZeroMemory(&hints, sizeof(hints));	// ensure we don't have garbage data 
 	hints.ai_family = AF_INET;			// IPv4
@@ -103,70 +97,8 @@ int main(int arg, char** argv)
 	}
 	printf("Connected to the server successfully!\n");
 
-// 	ChatMessage msg;
-// 	msg.message = "hello";
-// 	msg.messageLength = msg.message.length();
-// 	msg.header.messageType = 1;// Can use an enum to determine this
-// 	msg.header.packetSize =
-// 		msg.message.length()				// 5 'hello' has 5 bytes in it
-// 		+ sizeof(msg.messageLength)			// 4, uint32_t is 4 bytes
-// 		+ sizeof(msg.header.messageType)	// 4, uint32_t is 4 bytes
-// 		+ sizeof(msg.header.packetSize);	// 4, uint32_t is 4 bytes
-// 	// 5 + 4 + 4 + 4 = 17
-// 
-// 	const int bufSize = 512;
-// 	Buffer buffer(bufSize);
-// 
-// 	// Write our packet to the buffer
-// 	buffer.WriteUInt32LE(msg.header.packetSize);	// should be 17
-// 	buffer.WriteUInt32LE(msg.header.messageType);	// 1
-// 	buffer.WriteUInt32LE(msg.messageLength);		// 5
-// 	buffer.WriteString(msg.message);				// hello
 
-// 	for (int i = 0; i < 5; i++)
-// 	{
-// 		// Write
-// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-// 		if (result == SOCKET_ERROR) {
-// 			printf("send failed with error %d\n", WSAGetLastError());
-// 			closesocket(serverSocket);
-// 			freeaddrinfo(info);
-// 			WSACleanup();
-// 			return 1;
-// 		}
-// 		// Write
-// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-// 		if (result == SOCKET_ERROR) {
-// 			printf("send failed with error %d\n", WSAGetLastError());
-// 			closesocket(serverSocket);
-// 			freeaddrinfo(info);
-// 			WSACleanup();
-// 			return 1;
-// 		}
-// 		// Write
-// 		result = send(serverSocket, (const char*)(&buffer.m_BufferData[0]), msg.header.packetSize, 0);
-// 		if (result == SOCKET_ERROR) {
-// 			printf("send failed with error %d\n", WSAGetLastError());
-// 			closesocket(serverSocket);
-// 			freeaddrinfo(info);
-// 			WSACleanup();
-// 			return 1;
-// 		}
-// 
-// 		//// Read
-// 		//result = recv(serverSocket, buffer, 512, 0);
-// 		//if (result == SOCKET_ERROR) {
-// 		//	printf("recv failed with error %d\n", WSAGetLastError());
-// 		//	closesocket(serverSocket);
-// 		//	freeaddrinfo(info);
-// 		//	WSACleanup();
-// 		//	return 1;
-// 		//}
-// 
-// 		system("Pause"); // Force the user to press enter to continue;
-// 
-// 		//printf("Server sent: %s\n", buffer);
-// 	}
+	
 
 	// Set to compare to the one and only Server Socket
 	FD_SET socketsReadyForReading;
