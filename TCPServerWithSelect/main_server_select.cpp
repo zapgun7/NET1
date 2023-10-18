@@ -133,7 +133,7 @@ int main(int arg, char** argv)
 
 	std::string finalMessage = ""; // For parsing user commands
 	std::string const systemSignature = "{System"; // Don't close, leaves us with ability to put room number in there... or not!
-	std::string const welcome = "Welcome to my little chat program :)  Start your session by setting your nickname with !nick and use !help to view all commands. Enjoy!";//
+	std::string const welcome = "Welcome to my little chat program :)  Start your session by setting your nickname with !nick and use !help to view all commands. Enjoy!\n\n\n\n";//
 	std::string const chattingNoRoom = "You are not in a room. To chat, please join a room first with !join or use !help to look at possible commands"; // When a user sends a chat message while roomless
 	std::string const chattingNoRoomNorNick = "Please set a nickname with !nick and then join a room with !join to start chatting."; // When a user tries to chat with unset nick and roomless
 	std::string const nickCommNoNick = "To use !nick put a space after the command, followed by your desired username!"; // When a user just calls !nick

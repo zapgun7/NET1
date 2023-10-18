@@ -41,6 +41,14 @@ struct ChatMessage
 Buffer buildBuffer(ChatMessage msg);
 int sendMessage(SOCKET socket, ChatMessage msg);
 
+void clearLine(int columns)
+{
+	std::cout << "\r"; // Go to start of current line
+	for (int i = 0; i < columns; i++) // Create enough blank space below where the user is currently typing
+		std::cout << " ";
+	std::cout << "\r"; // go back to start of line to prepare for input
+}
+
 SOCKET serverSocket;
 struct addrinfo* info;
 
@@ -115,13 +123,28 @@ int main(int arg, char** argv)
 
 	std::string commandstarter = "!";
 	std::string userInputBuffer = "";
-	std::string blankLine = "";
 	bool wantsToSend = false;
 	
+	CONSOLE_SCREEN_BUFFER_INFO csbi; 
+	int columns = 0;
+	int prevColumns = 0;
+	int rowsDown = 0; // To keep track of how many rows deep we are 
+	bool isRowMoveUp = false;
+	bool isRowMoveDown = false;
+
+	system(" "); // This enables vt100 codes when launching as an exe
+
 	while (true) // The main loop
 	{
 		// set up select stuff like on the server, though can prob just set it up for the one server socket
 		// Add non-blocking input for the user, so chat messages can be updated while the user types up a message
+
+		prevColumns = columns; // Update last frames console width
+
+		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+		columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;  // Get the character count before wrapping starts
+		//std::cout << columns << std::endl;
+
 
 
 
@@ -136,11 +159,6 @@ int main(int arg, char** argv)
 			int key_hit = _getch();
 			if (key_hit == 8 && userInputBuffer.length() > 0) // Backspace, will remove most recent char from the input buffer
 			{
-				blankLine = "";
-				for (unsigned int i = 0; i < userInputBuffer.length(); i++)
-				{
-					blankLine += " ";
-				}
 				userInputBuffer.erase(userInputBuffer.end() - 1);
 			}
 			else if ((key_hit == 13) && (userInputBuffer.length() > 0)) // User presses enter and has SOMETHING in the input buffer
@@ -149,10 +167,57 @@ int main(int arg, char** argv)
 			}
 			else if (key_hit >= 32 && key_hit <= 126) // If within range of valid keys to input to message
 			{
-				userInputBuffer += char(key_hit); // Add single char to the input buffer
+				userInputBuffer += char(key_hit);
 			}
-			std::cout << "\r" << blankLine << "\r" << userInputBuffer; // Blankline clears the line, then new buffer is written
+			//std::cout << "\r" << blankLine << "\r" << userInputBuffer; // Blankline clears the line, then new buffer is written
+			prevColumns = columns; // Proc a 'redraw' of the user input
 		}
+		// //////////////////////END OF USER INPUT ///////////////////////////////////////
+		
+		// ////////////////////// START OF FORMATTING ///////////////////////////////////////////////
+		// I use VT100 escape codes here to do some magic with console manipulation          \33[2k wipes the line the cursor is on (console cursor)       \33[A traverses up a line     \33[B traverses down a line  
+		if ((columns >= userInputBuffer.length()) && (prevColumns == columns)) // No worries (don't need to format input for word wrapping)
+		{
+			if (rowsDown > 0) // If we're recovering from being 1+ rows down
+			{
+				for (int i = 0; i < rowsDown; i++)
+					std::cout << "\33[2K\33[A"; // Wipe line, then traverse up a row
+				rowsDown = 0;
+			}
+
+			clearLine(columns);
+			std::cout << userInputBuffer;  
+		}
+		else if (columns < userInputBuffer.length()) // Worries (need to format input)
+		{
+			if (rowsDown > (userInputBuffer.length() - 1) / columns) // Check if the row moved up
+				isRowMoveUp = true;
+			else if (rowsDown < (userInputBuffer.length() - 1) / columns) // Or if it moved down
+				isRowMoveDown = true;
+
+			rowsDown = (userInputBuffer.length()-1) / columns;
+
+
+			if (isRowMoveDown)/*(userInputBuffer.length() % columns == 1)*/ // Pushes to the next line before code that assumes that it is 
+			{
+				std::cout << "\33[B";
+				std::cout << userInputBuffer.substr(columns * (userInputBuffer.length() / columns), userInputBuffer.length() - 1);
+				isRowMoveDown = false;
+			}
+
+
+			clearLine(columns);
+
+			if (isRowMoveUp) // Move up a line 
+			{
+				std::cout << " \33[A\33[2k\r"; // Move up a line and clear it before drawing below
+				isRowMoveUp = false;
+			}
+			//makeSpace(columns);
+			std::cout << userInputBuffer.substr(columns*rowsDown, userInputBuffer.length() - 1) /*<< "\33[D"*/;
+
+		}
+		// /////////////////////////// END OF FORMATTING /////////////////////////////////////////////////////
 
 
 
