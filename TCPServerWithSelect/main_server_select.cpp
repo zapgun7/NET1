@@ -196,27 +196,6 @@ int main(int arg, char** argv)
 
 	while (true)
 	{
-// 		if ((activeConnections.size() > 0) && (debugIndex < numOfMats) && (trigger)) // Welcome mat debugging area
-// 		{
-// 			SOCKET socket = activeConnections[0];
-// 			ChatMessage messageToSend;
-// 			messageToSend.header.messageType = 1;
-// 			messageToSend.message = welcomeMats[3]/*welcomeMats[debugIndex++]*/; // Inform them on correct usage of !nick
-// 			messageToSend.messageLength = messageToSend.message.length();
-// 			messageToSend.header.packetSize = 10 + messageToSend.messageLength;
-// 			result = sendMessage(socket, messageToSend);
-// 			if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above
-// 			{
-// 				printf("send failed with error %d\n", WSAGetLastError());
-// 				closesocket(listenSocket);
-// 				freeaddrinfo(info);
-// 				WSACleanup();
-// 				break;
-// 			}
-// 			trigger = false;
-// 			//continue;
-// 		}
-
 		// Reset the socketsReadyForReading
 		FD_ZERO(&socketsReadyForReading);
 		
@@ -287,8 +266,6 @@ int main(int arg, char** argv)
 					msgBase = "user [";
 					msgBase += username;
 					msgBase += "] has left the room.";
-// 					msgToBroadcast.messageLength = msgToBroadcast.message.length();
-// 					msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
 
 					for (unsigned int roomIndex = 0; roomIndex < userRooms.size(); roomIndex++)
 					{
@@ -355,14 +332,11 @@ int main(int arg, char** argv)
 
 
 					ChatMessage msgToBroadcast;
-					//msgToBroadcast.header.packetSize = messageLength;
 					msgToBroadcast.header.messageType = 1;
 					msgBase += "[";
 					msgBase += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
 					msgBase += "] ";
 					msgBase += msg;
-					//msgToBroadcast.messageLength = msgToBroadcast.message.length();
-					//msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
 
 					// Must broadcast to all rooms the user is in
 					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user sending the message is in
@@ -442,21 +416,25 @@ int main(int arg, char** argv)
 					{
 						messageType = 51;
 					}
-					// 					else if (intermediate == "!dc") // Completely disconnect user
-					// 					{
-					// 						break; // Exits main loop and cleans up socket stuff, while also notifying server of its disconnect 
-					// 					}          // allowing it to gracefully purge the user from its system
 
 					if (messageType == 2) // Room join request
 					{
 						bool isValidInput = true;
 						std::cout << "Adding user to room" << std::endl;
 						// Make sure finalMessage contains valid int for conversion //
-						for (unsigned int c = 0; c < finalMessage.length(); c++)
+						if (finalMessage.length() > 4) // Make sure the room number isn't too big
 						{
-							if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+							isValidInput = false;
+						}
+						else
+						{
+							for (unsigned int c = 0; c < finalMessage.length(); c++)
 							{
-								isValidInput = false;
+								if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+								{
+									isValidInput = false;
+								}
+
 							}
 						}
 
@@ -516,7 +494,7 @@ int main(int arg, char** argv)
 						{
 							ChatMessage msgToSend;
 							msgToSend.header.messageType = 1;
-							msgToSend.message = systemSignature + "} " + "ERROR: Invalid Room | please use only numbers with no spaces :)";
+							msgToSend.message = systemSignature + "} " + "ERROR: Invalid Room | please use only numbers with no spaces and in range of (0-9999) :)";
 							msgToSend.messageLength = msgToSend.message.length();
 							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 
@@ -528,11 +506,19 @@ int main(int arg, char** argv)
 						bool isValidInput = true;
 						std::cout << "Removing user from room" << std::endl;
 
-						for (unsigned int c = 0; c < finalMessage.length(); c++)
+						if (finalMessage.length() > 4) // Make sure the room number isn't too big
 						{
-							if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+							isValidInput = false;
+						}
+						else
+						{
+							for (unsigned int c = 0; c < finalMessage.length(); c++)
 							{
-								isValidInput = false;
+								if ((finalMessage[c] < 48) || (finalMessage[c] > 57)) // 48-57
+								{
+									isValidInput = false;
+								}
+
 							}
 						}
 
@@ -586,7 +572,7 @@ int main(int arg, char** argv)
 						{
 							ChatMessage msgToSend;
 							msgToSend.header.messageType = 1;
-							msgToSend.message = systemSignature + "} " + "ERROR: Invalid Room | please use only numbers with no spaces :)";
+							msgToSend.message = systemSignature + "} " + "ERROR: Invalid Room | please use only numbers with no spaces and in range of (0-9999) :)";
 							msgToSend.messageLength = msgToSend.message.length();
 							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 

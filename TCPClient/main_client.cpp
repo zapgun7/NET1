@@ -118,8 +118,6 @@ int main(int arg, char** argv)
 	tv.tv_usec = 100;
 
 
-	//std::string* usrMsg = new std::string("");
-	//std::thread th1(userInput, *usrMsg);
 
 	std::string commandstarter = "!";
 	std::string userInputBuffer = "";
@@ -145,7 +143,6 @@ int main(int arg, char** argv)
 
 		GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
 		columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;  // Get the character count before wrapping starts
-		//std::cout << columns << std::endl;
 
 
 
@@ -153,8 +150,6 @@ int main(int arg, char** argv)
 
 
 		// USER INPUT AREA - VERY BLOCKING
-		//std::cin >> usrMsg; // Should find a way to make this non-blocking
-		//std::getline(std::cin, usrMsg);
 
 		if (_kbhit()) // If the user types something
 		{
@@ -171,7 +166,6 @@ int main(int arg, char** argv)
 			{
 				userInputBuffer += char(key_hit);
 			}
-			//std::cout << "\r" << blankLine << "\r" << userInputBuffer; // Blankline clears the line, then new buffer is written
 			prevColumns = columns; // Proc a 'redraw' of the user input
 		}
 
@@ -205,8 +199,9 @@ int main(int arg, char** argv)
 
 			if (isRowMoveDown)/*(userInputBuffer.length() % columns == 1)*/ // Pushes to the next line before code that assumes that it is 
 			{
-				std::cout << "\33[B";
-				std::cout << userInputBuffer.substr(columns * (userInputBuffer.length() / columns), userInputBuffer.length() - 1);
+				//std::cout << "\33[B";
+				std::cout << " "; // Should bump it down a line
+				//std::cout << userInputBuffer.substr(columns * (userInputBuffer.length() / columns), userInputBuffer.length() - 1);
 				isRowMoveDown = false;
 			}
 
@@ -218,7 +213,6 @@ int main(int arg, char** argv)
 				std::cout << " \33[A\33[2k\r"; // Move up a line and clear it before drawing below
 				isRowMoveUp = false;
 			}
-			//makeSpace(columns);
 			std::cout << userInputBuffer.substr(columns*rowsDown, userInputBuffer.length() - 1) /*<< "\33[D"*/;
 
 		}
@@ -321,7 +315,6 @@ int main(int arg, char** argv)
 			WSACleanup();
 			break;
 		}
-		//printf("Received %d bytes from the server!\n", result);
 
 		// We must receive 4 bytes before we know how long the packet actually is
 		// We must 
@@ -353,18 +346,6 @@ int main(int arg, char** argv)
 			uint32_t messageLength = buffer.ReadUInt32LE();
 			std::string msg = buffer.ReadString(messageLength);
 
-			//printf("%s\n", msg.c_str());
-// 			for (unsigned int l = 0; l < rowsDown; l++) // Clear all user input
-// 			{
-// 				clearLine(columns);
-// 				std::cout << "\33[A"; // Go up a line
-// 			}
-// 			std::cout << "\r";
-// 			clearLine(columns);
-			//for (unsigned int e = 0; e < userInputBuffer.length(); e++)
-			//{
-			//	std::cout << " "; // Replace input buffer with blank space to write new message from server
-			//}
 			std::cout << msg << std::endl; // Go to start of line with \r, then write server message
 			std::cout << userInputBuffer; // Write user buffer again
 		}
