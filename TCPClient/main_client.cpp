@@ -133,6 +133,8 @@ int main(int arg, char** argv)
 	bool isRowMoveDown = false;
 
 	system(" "); // This enables vt100 codes when launching as an exe
+	std::cout << "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"; // "Clear" the screen
+
 
 	while (true) // The main loop
 	{
@@ -172,7 +174,10 @@ int main(int arg, char** argv)
 			//std::cout << "\r" << blankLine << "\r" << userInputBuffer; // Blankline clears the line, then new buffer is written
 			prevColumns = columns; // Proc a 'redraw' of the user input
 		}
-		// //////////////////////END OF USER INPUT ///////////////////////////////////////
+
+
+
+
 		
 		// ////////////////////// START OF FORMATTING ///////////////////////////////////////////////
 		// I use VT100 escape codes here to do some magic with console manipulation          \33[2k wipes the line the cursor is on (console cursor)       \33[A traverses up a line     \33[B traverses down a line  
@@ -217,11 +222,12 @@ int main(int arg, char** argv)
 			std::cout << userInputBuffer.substr(columns*rowsDown, userInputBuffer.length() - 1) /*<< "\33[D"*/;
 
 		}
-		// /////////////////////////// END OF FORMATTING /////////////////////////////////////////////////////
 
 
 
 
+
+		///////////////////////////////////////// SEND MESSAGE /////////////////////////////////////////////////
 		if ((wantsToSend) &&(userInputBuffer.length() > 0)) // If user typed SOMETHING at all and has pressed enter
 		{
 			ChatMessage msgToSend;
@@ -236,35 +242,9 @@ int main(int arg, char** argv)
 				std::stringstream check(userInputBuffer);
 				std::string intermediate;
 
-				getline(check, intermediate, ' ');
-// 				if (intermediate == "!join")          // Join room 
-// 				{
-// 					msgToSend.header.messageType = 2;
-// 					while (getline(check, intermediate, ' ')) // Copy rest of message into new variable (command type is set in the message type)
-// 					{
-// 						finalMessage += intermediate + " ";																			    //!!!!!!!!!!!!!!!!!!!! Can we getline with '' rather than ' '?     Test later
-// 					}
-// 				}
-// 				else if (intermediate == "!leave")    // Leave room
-// 				{
-// 					msgToSend.header.messageType = 3;
-// 					while (getline(check, intermediate, ' '))
-// 					{
-// 						finalMessage += intermediate + " ";
-// 					}
-// 				}
-// 				else if (intermediate == "!nick")     // Change username
-// 				{
-// 					msgToSend.header.messageType = 4;
-// 					while (getline(check, intermediate, ' '))
-// 					{
-// 						finalMessage += intermediate + " ";
-// 					}
-// 				}
-// 				else if (intermediate == "!help")    // Requesting commands
-// 				{
-// 
-// 				}
+				getline(check, intermediate, ' '); // Get first token to see if a disconnect command
+
+
 				if (intermediate == "!dc") // Completely disconnect user
 				{
 					break; // Exits main loop and cleans up socket stuff, while also notifying server of its disconnect 
@@ -278,17 +258,18 @@ int main(int arg, char** argv)
 			msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 			sendMessage(serverSocket, msgToSend);
 
-			std::cout << "\r"; // Go to beginning of line to prepare clearing it
-			for (unsigned int e = 0; e < userInputBuffer.length(); e++) // Clear the old input line (cause we just sent it to the server)
+			for (unsigned int l = 0; l < rowsDown; l++) // Clear all user input
 			{
-				std::cout << " "; // Replace input buffer with blank space to write new message from server
+				clearLine(columns);
+				std::cout << "\33[A"; // Go up a line
 			}
+			clearLine(columns);
+			
+
+			rowsDown = 0;
 			userInputBuffer = ""; // Reset the user input buffer
 			wantsToSend = false; 
 		}
-
-
-
 
 
 
@@ -373,12 +354,18 @@ int main(int arg, char** argv)
 			std::string msg = buffer.ReadString(messageLength);
 
 			//printf("%s\n", msg.c_str());
-			std::cout << "\r";
-			for (unsigned int e = 0; e < userInputBuffer.length(); e++)
-			{
-				std::cout << " "; // Replace input buffer with blank space to write new message from server
-			}
-			std::cout << "\r" << msg << std::endl; // Go to start of line with \r, then write server message
+// 			for (unsigned int l = 0; l < rowsDown; l++) // Clear all user input
+// 			{
+// 				clearLine(columns);
+// 				std::cout << "\33[A"; // Go up a line
+// 			}
+// 			std::cout << "\r";
+// 			clearLine(columns);
+			//for (unsigned int e = 0; e < userInputBuffer.length(); e++)
+			//{
+			//	std::cout << " "; // Replace input buffer with blank space to write new message from server
+			//}
+			std::cout << msg << std::endl; // Go to start of line with \r, then write server message
 			std::cout << userInputBuffer; // Write user buffer again
 		}
 
