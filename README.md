@@ -18,7 +18,7 @@ DEMO: https://www.youtube.com/watch?v=r1xb2h-P_Vc
 
 ## Design Choices
 - This was a less complex project, so only 1 design choice stands out to me
-# Non-Blocking Input
+### Non-Blocking Input
 - I didn't want to TOUCH threads, so I created an "input buffer"
 - I used conio.h's _kbhit() and _getch() to get key inputs into the window
 - These inputs were evaluated, and if deemed valid, were added to the input buffer
