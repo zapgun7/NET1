@@ -346,6 +346,13 @@ int main(int arg, char** argv)
 			uint32_t messageLength = buffer.ReadUInt32LE();
 			std::string msg = buffer.ReadString(messageLength);
 
+			clearLine(columns);
+			for (int lines = 0; lines < rowsDown; lines++)
+			{
+				std::cout << "\33[A"; // Go up a line
+				clearLine(columns);	// Clear line
+			}
+
 			std::cout << msg << std::endl; // Go to start of line with \r, then write server message
 			std::cout << userInputBuffer; // Write user buffer again
 		}
