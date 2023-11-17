@@ -21,9 +21,24 @@
     <ClCompile Include="..\Shared\authentication.pb.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="mysqlutil.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="sha256.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\Shared\authentication.pb.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mysqlutil.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="buffer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="sha256.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
