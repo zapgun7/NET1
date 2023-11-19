@@ -66,7 +66,7 @@ bool CheckExisting(const char* email)
 	return false;
 }
 
-bool AddAccount(const char* email, const char* password) // Calling this assumes all info is fine (long enought password, email doesn't already exist)
+int AddAccount(const char* email, const char* password) // Calling this assumes all info is fine (long enought password, email doesn't already exist)
 {
 	// Start by making the user
 	//long userID = AddUser();
@@ -94,11 +94,11 @@ bool AddAccount(const char* email, const char* password) // Calling this assumes
 
 	int count = pStmt->executeUpdate();
 
-	return true;
+	return userID;
 }
 
 // Attempts to authorize the account with the provided credentials
-int GetAccount(const char* email, const char* password) // Returns 0 if auth success, 1 if invalid pass, 2 if server error
+int GetAccount(const char* email, const char* password) // Returns > 0 (uid) if sucess, -1 if invalid pass, -2 if server error
 {
 	sql::PreparedStatement* pStmt = g_PreparedStatements[(int)StatementType::GetAccount];
 	pStmt->setString(1, email); // email
@@ -128,15 +128,15 @@ int GetAccount(const char* email, const char* password) // Returns 0 if auth suc
 
 
 		delete result;
-		return 0;
+		return userID;
 	}
 	else
 	{
 		// Passwords did not match
 		delete result;
-		return 1;
+		return -1;
 	}
-	return 2;
+	return -2; // server error
 }
 
 // Just updates the last login time
@@ -163,7 +163,7 @@ void UpdateUser(uint64_t id)
 struct PacketHeader
 {
 	uint32_t packetSize;
-	uint32_t messageType;
+	uint32_t messageType; // 9 = webCreate success   10 = fail     11 = auth Success   12 = fail
 };
 
 struct ChatMessage
@@ -484,10 +484,137 @@ int main(int argc, char** argv)
 					long requestID = dsCreate.requestid(); // To attach to the return message
 
 					// Now we query web_auth to see if an entry with this email exists already
+					if (CheckExisting(dsCreate.email().c_str())) // If email exists
+					{
+						// Construct and return error
+
+						auth::CreateAccountWebFailure createFail;
+						std::string serializedFailure;
+						createFail.set_requestid(requestID); // Set request id
+						createFail.set_type(auth::CreateAccountWebFailure_reason_ACCOUNT_ALREADY_EXISTS);
+						//serializedFailure = createFail.SerializeAsString();
+						createFail.SerializeToString(&serializedFailure);
+
+						ChatMessage msgToSend;
+						msgToSend.message = serializedFailure;
+						msgToSend.header.messageType = 10; // Web create failure
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+						result = sendMessage(socket, msgToSend);
+
+						continue;
+					}
+					else // Add new account and return success
+					{
+						int uid = AddAccount(dsCreate.email().c_str(), dsCreate.plaintextpassword().c_str());
+						if (uid >= 0)
+						{
+							// Returned true, a success!
+							auth::CreateAccountWebSuccess createSucc;
+							std::string serializedSuccess;
+							createSucc.set_requestid(requestID);
+							createSucc.set_userid(uid);
+							createSucc.SerializeToString(&serializedSuccess);
+
+							ChatMessage msgToSend;
+							msgToSend.message = serializedSuccess;
+							msgToSend.header.messageType = 9; // Web create success
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+							result = sendMessage(socket, msgToSend);
+
+							continue;
+						}
+						else // uid = 1-   (error)
+						{
+							// Probably an internal server error TODO
+						}
+					}
 				}
 				else if (messageType == 2) // AuthenticateWeb       user requested to login
 				{
-					
+					// Start by deserializing the CreatAccountWeb object
+					uint32_t messageLength = buffer.ReadUInt32LE();
+					std::string msg = buffer.ReadString(messageLength);
+
+					auth::AuthenticateWeb dsAuth;
+					bool success = dsAuth.ParseFromString(msg);
+					if (!success)
+						std::cout << "Failed to parse the AuthenticateWeb!" << std::endl;
+
+					long requestID = dsAuth.requestid(); // To attach to the return message
+
+					// Prepare these in case of failure
+					auth::AuthenticateWebFailure authFail;
+					std::string serializedFail;
+
+
+					// Now check if the email exists in the first place
+					if (CheckExisting(dsAuth.email().c_str())) // If email exists
+					{
+						// It does exist! Attempt authorizing it
+
+						int authResult = GetAccount(dsAuth.email().c_str(), dsAuth.plaintextpassword().c_str());
+
+						if (authResult >= 0) // Success, this value is the user id
+						{
+							auth::AuthenticateWebSuccess authSucc;
+							std::string serializedSuccess;
+							authSucc.set_requestid(requestID);
+							authSucc.set_userid(authResult);
+							authSucc.SerializeToString(&serializedSuccess);
+
+							ChatMessage msgToSend;
+							msgToSend.message = serializedSuccess;
+							msgToSend.header.messageType = 11; // Web auth success
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+							result = sendMessage(socket, msgToSend);
+
+
+							continue;
+						}
+						else if (authResult == -1) // Wrong password
+						{
+							authFail.set_requestid(requestID);
+							authFail.set_type(auth::AuthenticateWebFailure_reason_INVALID_CREDENTIALS);
+							
+						}
+						else // -2   internal server error
+						{
+							authFail.set_requestid(requestID);
+							authFail.set_type(auth::AuthenticateWebFailure_reason_INTERNAL_SERVER_ERROR);
+						}
+
+						// Continuation of 1 of the error paths above
+						authFail.SerializeToString(&serializedFail);
+
+						ChatMessage msgToSend;
+						msgToSend.message = serializedFail;
+						msgToSend.header.messageType = 12; // Web auth fail
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+						result = sendMessage(socket, msgToSend);
+						continue;
+					}
+					else
+					{
+						// Email doesn't exist
+						auth::AuthenticateWebFailure authFail;
+						std::string serializedFail;
+						authFail.set_requestid(requestID);
+						authFail.set_type(auth::AuthenticateWebFailure_reason_INVALID_CREDENTIALS);
+						authFail.SerializeToString(&serializedFail);
+
+						ChatMessage msgToSend;
+						msgToSend.message = serializedFail;
+						msgToSend.header.messageType = 12; // Web auth fail
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+						result = sendMessage(socket, msgToSend);
+
+						continue;
+					}
 				}
 				if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above
 				{
