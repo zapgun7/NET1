@@ -47,6 +47,7 @@ enum class StatementType
 // Make sure to cleanup (delete these pointers) when done.
 std::map<int, sql::PreparedStatement*> g_PreparedStatements;
 
+void UpdateUser(uint64_t id);
 
 // Returns true if a table entry exists with the email
 bool CheckExisting(const char* email)

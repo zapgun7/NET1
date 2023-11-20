@@ -18,6 +18,7 @@
 #include <map>
 #include "buffer.h"
 #include "cUserRoomInfoHandler.h"
+#include "../Shared/authentication.pb.h"
 
 // Need to link Ws2_32.lib
 #pragma comment(lib, "Ws2_32.lib")
@@ -72,6 +73,42 @@ int main(int arg, char** argv)
 	hints.ai_protocol = IPPROTO_TCP;	// TCP
 	hints.ai_flags = AI_PASSIVE;
 
+
+	/////////////////////////// AUTH SERVER CONNECTION ///////////////////////////////////////
+	result = getaddrinfo("127.0.0.1", DEFAULT_PORT, &hints, &info);
+	if (result != 0) {
+		printf("getaddrinfo failed with error %d\n", result);
+		WSACleanup();
+		return 1;
+	}
+	printf("getaddrinfo successfully!\n");
+
+	// Socket
+	SOCKET serverSocket = socket(info->ai_family, info->ai_socktype, info->ai_protocol);
+	if (serverSocket == INVALID_SOCKET) {
+		printf("socket failed with error %d\n", WSAGetLastError());
+		freeaddrinfo(info);
+		WSACleanup();
+		return 1;
+	}
+	printf("socket created successfully!\n");
+
+	// Connect
+	result = connect(serverSocket, info->ai_addr, (int)info->ai_addrlen);
+	if (serverSocket == INVALID_SOCKET) {
+		printf("connect failed with error %d\n", WSAGetLastError());
+		closesocket(serverSocket);
+		freeaddrinfo(info);
+		WSACleanup();
+		return 1;
+	}
+	printf("Connected to the server successfully!\n");
+
+
+	///////////////////////////////////////////////////////////////////////////////////////
+
+	///////////////////////////// LISTEN SOCKET 4 CLIENTS ///////////////////////////////
+
 	// https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo
 	result = getaddrinfo(NULL, DEFAULT_PORT, &hints, &info);
 	if (result != 0) {
@@ -116,6 +153,9 @@ int main(int arg, char** argv)
 	}
 	printf("listen successful\n"); /// ////////////////////////////////////////////////////////////listening.....
 
+	//////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 
 	std::vector<SOCKET> activeConnections;
 	cUserRoomInfoHandler sessionInfo; // Class variable to keep track of all room and user related information
@@ -139,6 +179,8 @@ int main(int arg, char** argv)
 	std::string const nickCommNoNick = "To use !nick put a space after the command, followed by your desired username!"; // When a user just calls !nick
 	std::string commands =  "///////////////////////////////////////////////////////////////////////////////////////////////////\n";
 	commands +=             "/////  !help           Displays all available commands and their syntax                       /////\n";
+	commands +=				"/////  !register [email] [pass]      Register with an email and password                      /////\n";
+	commands +=				"/////  !authenticate [email] [pass]  Login to an existing account		                       /////\n";
 	commands +=				"/////  !nick name      Sets the user's nickname as name; must set this to join rooms          /////\n";
 	commands +=				"/////  !join room#     Attempts to join the specified room number (rooms can only be numbers) /////\n";
 	commands +=				"/////                  If the room doesn't exist, it will create one with the provided number /////\n";
@@ -411,6 +453,19 @@ int main(int arg, char** argv)
 					else if (intermediate == "!help")    // Requesting commands
 					{
 						messageType = 50;     // TOMDO (to maybe do)     Depending on what comes after !help, provide specific info on the command (i.e. '!help join' would give extra details on the join command)
+					}
+					else if (intermediate == "!register")
+					{
+						// Attempt to register a new account
+						// Split up next two tokens in string, first as email, second as password
+						// Must have a request id for the user calling this, maybe something related to their socket number
+						// Check if there are indeed two distinct non-null tokens
+						// Leave password checking for the auth server I think
+					}
+					else if (intermediate == "!authenticate")
+					{
+						// Attempt to login to an existing account
+						// Pretty much same steps as above
 					}
 					else
 					{
