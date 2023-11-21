@@ -75,7 +75,7 @@ int main(int arg, char** argv)
 
 
 	/////////////////////////// AUTH SERVER CONNECTION ///////////////////////////////////////
-	result = getaddrinfo("127.0.0.1", DEFAULT_PORT, &hints, &info);
+	result = getaddrinfo("127.0.0.1", DEFAULT_PORT + 1, &hints, &info);
 	if (result != 0) {
 		printf("getaddrinfo failed with error %d\n", result);
 		WSACleanup();
@@ -108,6 +108,7 @@ int main(int arg, char** argv)
 	///////////////////////////////////////////////////////////////////////////////////////
 
 	///////////////////////////// LISTEN SOCKET 4 CLIENTS ///////////////////////////////
+
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo
 	result = getaddrinfo(NULL, DEFAULT_PORT, &hints, &info);
@@ -177,6 +178,11 @@ int main(int arg, char** argv)
 	std::string const chattingNoRoom = "You are not in a room. To chat, please join a room first with !join or use !help to look at possible commands"; // When a user sends a chat message while roomless
 	std::string const chattingNoRoomNorNick = "Please set a nickname with !nick and then join a room with !join to start chatting."; // When a user tries to chat with unset nick and roomless
 	std::string const nickCommNoNick = "To use !nick put a space after the command, followed by your desired username!"; // When a user just calls !nick
+	std::string const internalError = "INTERNAL SERVER ERROR: Please try again later"; // Whatever the hell triggers this
+	std::string const invalidCred = "Invalid login info. If you forgot your email or password, write it down next time!"; // Authorization failed
+	std::string const invalidPass = "This password is too weak, please use one with at least 4 characters."; // Invalid password
+	std::string const accountAlreadyExists = "This email is already bound to an account."; // Failed attempt to register an account with an already registered email
+	std::string const notAuthed = "You have not been authorized yet. Please login with !authorize or create a new account with !register. Use !help for more info";
 	std::string commands =  "///////////////////////////////////////////////////////////////////////////////////////////////////\n";
 	commands +=             "/////  !help           Displays all available commands and their syntax                       /////\n";
 	commands +=				"/////  !register [email] [pass]      Register with an email and password                      /////\n";
@@ -236,6 +242,8 @@ int main(int arg, char** argv)
 	bool trigger = true;
 	int debugIndex = 0;
 
+	activeConnections.push_back(serverSocket);
+
 	while (true)
 	{
 		// Reset the socketsReadyForReading
@@ -245,6 +253,7 @@ int main(int arg, char** argv)
 		// This will remain set if there is a "connect" call from a 
 		// client to our server.
 		FD_SET(listenSocket, &socketsReadyForReading);
+		//FD_SET(serverSocket, &socketsReadyForReading);
 
 		// Add all of our active connections to our socketsReadyForReading
 		// set.
@@ -364,46 +373,60 @@ int main(int arg, char** argv)
 
 				if (messageType == 1) // Chat message
 				{
-					std::cout << "Basic chat message" << std::endl;
-					// We know this is a ChatMessage
-					uint32_t messageLength = buffer.ReadUInt32LE();
-					std::string msg = buffer.ReadString(messageLength);
-					std::string msgBase;
-
-					std::vector<int> rooms = sessionInfo.getUserRooms(socket);
-
-
-					ChatMessage msgToBroadcast;
-					msgToBroadcast.header.messageType = 1;
-					msgBase += "[";
-					msgBase += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
-					msgBase += "] ";
-					msgBase += msg;
-
-					// Must broadcast to all rooms the user is in
-					for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user sending the message is in
+					if (!sessionInfo.IsUserAuthed(socket))
 					{
-						msgToBroadcast.message = "-";
-						msgToBroadcast.message += std::to_string(rooms[roomIndex]);
-						msgToBroadcast.message += "- ";
-						msgToBroadcast.message += msgBase;
-						msgToBroadcast.messageLength = msgToBroadcast.message.length();
-						msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-						result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+						// Not authed yet, inform user
+						ChatMessage msgToSend;
+						msgToSend.header.messageType = 1;
+						msgToSend.message = systemSignature + "} " + notAuthed;
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+						result = sendMessage(socket, msgToSend);
 					}
-					if (sessionInfo.getUsername(socket).length() == 0) // If the user hasn't set a nickname yet
+					else // User is authorized
 					{
-						msgToBroadcast.message = systemSignature + "} " + chattingNoRoomNorNick;
-						msgToBroadcast.messageLength = msgToBroadcast.message.length();
-						msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-						result = sendMessage(socket, msgToBroadcast);
-					}
-					else if (rooms.size() == 0) // If user isn't in any rooms, let them know
-					{
-						msgToBroadcast.message = systemSignature + "} " + chattingNoRoom;
-						msgToBroadcast.messageLength = msgToBroadcast.message.length();
-						msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-						result = sendMessage(socket, msgToBroadcast);
+						std::cout << "Basic chat message" << std::endl;
+						// We know this is a ChatMessage
+						uint32_t messageLength = buffer.ReadUInt32LE();
+						std::string msg = buffer.ReadString(messageLength);
+						std::string msgBase;
+
+						std::vector<int> rooms = sessionInfo.getUserRooms(socket);
+
+
+						ChatMessage msgToBroadcast;
+						msgToBroadcast.header.messageType = 1;
+						msgBase += "[";
+						msgBase += sessionInfo.getUsername(socket);     // Add username sending the message to the start of the message
+						msgBase += "] ";
+						msgBase += msg;
+
+						// Must broadcast to all rooms the user is in
+						for (unsigned int roomIndex = 0; roomIndex < rooms.size(); roomIndex++) // Iterate through all rooms the user sending the message is in
+						{
+							msgToBroadcast.message = "-";
+							msgToBroadcast.message += std::to_string(rooms[roomIndex]);
+							msgToBroadcast.message += "- ";
+							msgToBroadcast.message += msgBase;
+							msgToBroadcast.messageLength = msgToBroadcast.message.length();
+							msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+							result = broadcast(sessionInfo.getRoomUsers(rooms[roomIndex]), msgToBroadcast); // Get each rooms' vector of users to broadcast to
+						}
+						if (sessionInfo.getUsername(socket).length() == 0) // If the user hasn't set a nickname yet
+						{
+							msgToBroadcast.message = systemSignature + "} " + chattingNoRoomNorNick;
+							msgToBroadcast.messageLength = msgToBroadcast.message.length();
+							msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+							result = sendMessage(socket, msgToBroadcast);
+						}
+						else if (rooms.size() == 0) // If user isn't in any rooms, let them know
+						{
+							msgToBroadcast.message = systemSignature + "} " + chattingNoRoom;
+							msgToBroadcast.messageLength = msgToBroadcast.message.length();
+							msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
+							result = sendMessage(socket, msgToBroadcast);
+						}
 					}
 				}
 				else if (messageType == 2) // User calls a command
@@ -461,15 +484,105 @@ int main(int arg, char** argv)
 						// Must have a request id for the user calling this, maybe something related to their socket number
 						// Check if there are indeed two distinct non-null tokens
 						// Leave password checking for the auth server I think
+
+						messageType = 0; // Set this so it doesn't trigger the next section
+						bool isValid = true;
+						auth::CreateAccountWeb newAccount;
+
+						if (getline(check, intermediate, ' ')) // Get presumably the email
+							newAccount.set_email(intermediate);
+						else
+							isValid = false;
+
+						if (getline(check, intermediate, ' ')) // Get presumably the password
+							newAccount.set_plaintextpassword(intermediate);
+						else
+							isValid = false;
+
+						if (!isValid) // If there weren't enough parameters provided
+						{
+							// Send message back to client with error
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "} " + invalidPass;
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(socket, msgToSend);
+						}
+						else
+						{
+							// Here we assume there is content for both email and pass, we now send it to the auth server
+
+							newAccount.set_requestid((int)socket); // Use socket int as request id
+							std::string serializedNewAccount;
+							newAccount.SerializeToString(&serializedNewAccount);
+
+							ChatMessage msgToSend;
+							msgToSend.message = serializedNewAccount;
+							msgToSend.header.messageType = 1; // Auth-server recognizes this as account register
+
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+							result = sendMessage(serverSocket, msgToSend);
+						}
 					}
 					else if (intermediate == "!authenticate")
 					{
 						// Attempt to login to an existing account
 						// Pretty much same steps as above
+
+						messageType = 0; // Set this so it doesn't trigger the next section
+						bool isValid = true;
+						auth::AuthenticateWeb authAccount;
+
+						if (getline(check, intermediate, ' ')) // Get presumably the email
+							authAccount.set_email(intermediate);
+						else
+							isValid = false;
+
+						if (getline(check, intermediate, ' ')) // Get presumably the password
+							authAccount.set_plaintextpassword(intermediate);
+						else
+							isValid = false;
+
+						if (!isValid) // If there weren't enough parameters provided
+						{
+							// Send message back to client with error
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "} " + invalidPass;
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(socket, msgToSend);
+						}
+						else
+						{
+							// Assuming email and password are both existing in the client's message
+
+							authAccount.set_requestid((int)socket); // Use socket int as request id
+							std::string serializedAuthAccount;
+							authAccount.SerializeToString(&serializedAuthAccount);
+
+							ChatMessage msgToSend;
+							msgToSend.message = serializedAuthAccount;
+							msgToSend.header.messageType = 2; // Auth-server recognizes this as account authentication attempt
+
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+							result = sendMessage(serverSocket, msgToSend);
+						}
 					}
 					else
 					{
 						messageType = 51;
+					}
+
+					if ((messageType >= 2) && (messageType <= 4)) // These commands require user to be authorized, make sure they are. Otherwise, set message type to an error message
+					{
+						if (!sessionInfo.IsUserAuthed(socket)) // If not authorized
+							messageType = 49;
 					}
 
 					if (messageType == 2) // Room join request
@@ -701,6 +814,17 @@ int main(int arg, char** argv)
 						
 
 					}
+					else if (messageType == 49) // Unauthorized user, inform them they must authorize first
+					{
+						std::cout << "Sending Auth Help\n";
+						ChatMessage msgToSend;
+						msgToSend.header.messageType = 1;
+						msgToSend.message = systemSignature + "} " + notAuthed;
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+						result = sendMessage(socket, msgToSend);
+					}
 					else if (messageType == 50)   // TODO NOT WORKING, suspect is buffer resize on client's end
 					{
 						std::cout << "Sending Help\n";
@@ -715,6 +839,163 @@ int main(int arg, char** argv)
 					else if (messageType == 51)
 					{
 						// TODO inform user they have typed in an invalid command, suggest !help for list of commands
+					}
+				}
+				// 9 = webCreate success   10 = fail     11 = auth Success   12 = fail
+				else if ((messageType >= 9) && (messageType <= 12))
+				{
+					// 4 message types below have overlapping operations, we do those here
+					uint32_t messageLength = buffer.ReadUInt32LE();
+					std::string msg = buffer.ReadString(messageLength);
+					SOCKET requestSock;
+					bool socketFound = false;
+
+					if (messageType == 9) // webCreate success
+					{
+						auth::CreateAccountWebSuccess createSucc;
+						bool success = createSucc.ParseFromString(msg);
+						if (!success)
+							std::cout << "Failed to parse the CreateAccountWebSuccess" << std::endl;
+						int uid = createSucc.userid();
+						int socketID = createSucc.requestid();
+
+						// Find the socket that made the request
+						for (int sock = 0; sock < activeConnections.size(); sock++)
+						{
+							if ((int)activeConnections[sock] == socketID)
+							{
+								requestSock = activeConnections[sock];
+								socketFound = true;
+								break;
+							}
+						}
+						if (socketFound) // Socket that made the request found
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "} " + "Registration successful.";
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(requestSock, msgToSend);
+						}
+						else
+						{
+							// Socket not found, I guess do nothing...
+						}
+
+					}
+					else if (messageType == 10) // webCreate fail
+					{
+						auth::CreateAccountWebFailure createFail;
+						bool success = createFail.ParseFromString(msg);
+						if (!success)
+							std::cout << "Failed to parse the CreateAccountWebFailure" << std::endl;
+						int socketID = createFail.requestid();
+						auth::CreateAccountWebFailure_reason reason = createFail.type();
+
+						// Find the socket that made the request
+						for (int sock = 0; sock < activeConnections.size(); sock++)
+						{
+							if ((int)activeConnections[sock] == socketID)
+							{
+								requestSock = activeConnections[sock];
+								socketFound = true;
+								break;
+							}
+						}
+						if (socketFound) // Socket that made the request found
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							if (reason == auth::CreateAccountWebFailure_reason_ACCOUNT_ALREADY_EXISTS)
+								msgToSend.message = systemSignature + "} " + accountAlreadyExists;
+							else if (reason == auth::CreateAccountWebFailure_reason_INVALID_PASSWORD)
+								msgToSend.message = systemSignature + "} " + invalidPass;
+							else //if (reason == auth::CreateAccountWebFailure_reason_INTERNAL_SERVER_ERROR)
+								msgToSend.message = systemSignature + "} " + internalError;
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(requestSock, msgToSend);
+						}
+						else
+						{
+							// Socket not found, I guess do nothing...
+						}
+					}
+					else if (messageType == 11) // authenticateWeb success
+					{
+						auth::AuthenticateWebSuccess authSucc;
+						bool success = authSucc.ParseFromString(msg);
+						if (!success)
+							std::cout << "Failed to parse the AuthenticateWebSuccess" << std::endl;
+						int uid = authSucc.userid();
+						int socketID = authSucc.requestid();
+						std::string creationDate = authSucc.creationdate();
+
+						// Find the socket that made the request
+						for (int sock = 0; sock < activeConnections.size(); sock++)
+						{
+							if ((int)activeConnections[sock] == socketID)
+							{
+								requestSock = activeConnections[sock];
+								socketFound = true;
+								break;
+							}
+						}
+						if (socketFound) // Socket that made the request found
+						{
+							sessionInfo.AddAuthedUser(requestSock);
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							msgToSend.message = systemSignature + "} " + "Authentication successful, account created on " + creationDate + ".";
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(requestSock, msgToSend);
+						}
+						else
+						{
+							// Socket not found, I guess do nothing...
+						}
+					}
+					else if (messageType == 12) // authenticateWeb fail
+					{
+						auth::AuthenticateWebFailure authFail;
+						bool success = authFail.ParseFromString(msg);
+						if (!success)
+							std::cout << "Failed to parse the AuthenticateWebFailure" << std::endl;
+						int socketID = authFail.requestid();
+						auth::AuthenticateWebFailure_reason reason = authFail.type();
+
+						// Find the socket that made the request
+						for (int sock = 0; sock < activeConnections.size(); sock++)
+						{
+							if ((int)activeConnections[sock] == socketID)
+							{
+								requestSock = activeConnections[sock];
+								socketFound = true;
+								break;
+							}
+						}
+						if (socketFound) // Socket that made the request found
+						{
+							ChatMessage msgToSend;
+							msgToSend.header.messageType = 1;
+							if (reason == auth::AuthenticateWebFailure_reason_INVALID_CREDENTIALS)
+								msgToSend.message = systemSignature + "} " + invalidCred;
+							else //if (reason == auth::AuthenticateWebFailure_reason_INTERNAL_SERVER_ERROR)
+								msgToSend.message = systemSignature + "} " + internalError;
+							msgToSend.messageLength = msgToSend.message.length();
+							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+
+							result = sendMessage(requestSock, msgToSend);
+						}
+						else
+						{
+							// Socket not found, I guess do nothing...
+						}
 					}
 				}
 				if (result == SOCKET_ERROR) // Check for errors from any part of the message type handling above

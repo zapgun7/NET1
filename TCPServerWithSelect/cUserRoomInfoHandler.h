@@ -31,9 +31,14 @@ public:
 	void initializeUser(SOCKET socket);
 	bool setUsername(SOCKET socket, std::string username);
 
+	// User Authorization
+	bool AddAuthedUser(SOCKET socket); // Returns false if user is already authorized
+	bool IsUserAuthed(SOCKET socket); // Returns false if the user is not authorized
+
 
 private:
 	std::map<int, std::vector<SOCKET>> room_map; // Map with room numbers as keys, and vectors of user sockets as values
 	std::map<SOCKET, UserInfo> userinfo_map; // Map of userinfo, identifiable by their unique socket
+	std::vector<SOCKET> authedUsers; // Vector of authorized sockets
 };
 

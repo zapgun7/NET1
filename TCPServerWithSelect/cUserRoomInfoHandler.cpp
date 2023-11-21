@@ -160,3 +160,23 @@ bool cUserRoomInfoHandler::setUsername(SOCKET socket, std::string username)  // 
 
 	return true;
 }
+
+bool cUserRoomInfoHandler::AddAuthedUser(SOCKET socket)
+{
+	if (!IsUserAuthed(socket))
+	{
+		authedUsers.push_back(socket);
+		return true; // Successfully authorized user
+	}
+	return false; // User already authorized
+}
+
+bool cUserRoomInfoHandler::IsUserAuthed(SOCKET socket)
+{
+	for (unsigned int i = 0; i < authedUsers.size(); i++)
+	{
+		if (authedUsers[i] == socket)
+			return true; // User is authorized
+	}
+	return false; // User not in vector, therefore not yet authorized
+}

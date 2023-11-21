@@ -151,6 +151,20 @@ void UpdateUser(uint64_t id)
 	return;
 }
 
+// Returns the creation date of the user corresponding to the provided uid
+std::string GetCreationDate(int uid)
+{
+	std::string selectCall = "SELECT creation_date FROM user WHERE id = ";
+	selectCall += std::to_string(uid) + ";";
+
+	sql::ResultSet* dateResult = g_MySQLDB.Select(selectCall.c_str());
+	dateResult->next();
+
+	std::string creatDate = dateResult->getString("creation_date");
+
+	return creatDate;
+}
+
 // Generates a new user, returns the auto-incremented id
 // long AddUser()
 // {
@@ -230,7 +244,7 @@ int main(int argc, char** argv)
 	hints.ai_flags = AI_PASSIVE;
 
 	// https://learn.microsoft.com/en-us/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo
-	result = getaddrinfo(NULL, DEFAULT_PORT, &hints, &info);
+	result = getaddrinfo(NULL, DEFAULT_PORT + 1, &hints, &info);
 	if (result != 0) {
 		printf("getaddrinfo failed with error %d\n", result);
 		WSACleanup();
@@ -309,7 +323,7 @@ int main(int argc, char** argv)
 		printf("Email: %s id=%d\n", email.c_str(), id);
 	}
 
-	return 0;
+	//return 0;
 
 
 
@@ -402,26 +416,6 @@ int main(int argc, char** argv)
 							activeConnections.erase(activeConnections.begin() + connIndex); // remove from active connections     
 						}
 					}
-// 					std::string username = sessionInfo.getUsername(socket);          // Get user info before we wipe it
-// 					std::vector<int> userRooms = sessionInfo.getUserRooms(socket);   // So we can send out room leaving notifications
-// 					sessionInfo.removeFromRoom(socket, -1); // Purging user from system                                
-
-					// Broadcasting to all rooms the user was in
-// 					ChatMessage msgToBroadcast;
-// 					msgToBroadcast.header.messageType = 1;
-// 					msgBase = "user [";
-// 					msgBase += username;
-// 					msgBase += "] has left the room.";
-
-// 					for (unsigned int roomIndex = 0; roomIndex < userRooms.size(); roomIndex++)
-// 					{
-// 						msgToBroadcast.message = systemSignature + "-";// Start system signature
-// 						msgToBroadcast.message += std::to_string(userRooms[roomIndex]) + "} "; // End system signature
-// 						msgToBroadcast.message += msgBase;
-// 						msgToBroadcast.messageLength = msgToBroadcast.message.length();
-// 						msgToBroadcast.header.packetSize = 10 + msgToBroadcast.messageLength;
-// 						result = broadcast(sessionInfo.getRoomUsers(userRooms[roomIndex]), msgToBroadcast);
-// 					}
 
 					continue; // Skip rest since the socket has been removed
 				}
@@ -505,7 +499,7 @@ int main(int argc, char** argv)
 
 						continue;
 					}
-					else // Add new account and return success
+					else if (dsCreate.plaintextpassword().length() >= 4)// Add new account and return success
 					{
 						int uid = AddAccount(dsCreate.email().c_str(), dsCreate.plaintextpassword().c_str());
 						if (uid >= 0)
@@ -530,6 +524,26 @@ int main(int argc, char** argv)
 						{
 							// Probably an internal server error TODO
 						}
+					}
+					else // Bad password
+					{
+						// Construct and return error
+
+						auth::CreateAccountWebFailure createFail;
+						std::string serializedFailure;
+						createFail.set_requestid(requestID); // Set request id
+						createFail.set_type(auth::CreateAccountWebFailure_reason_INVALID_PASSWORD);
+						//serializedFailure = createFail.SerializeAsString();
+						createFail.SerializeToString(&serializedFailure);
+
+						ChatMessage msgToSend;
+						msgToSend.message = serializedFailure;
+						msgToSend.header.messageType = 10; // Web create failure
+						msgToSend.messageLength = msgToSend.message.length();
+						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
+						result = sendMessage(socket, msgToSend);
+
+						continue;
 					}
 				}
 				else if (messageType == 2) // AuthenticateWeb       user requested to login
@@ -563,6 +577,11 @@ int main(int argc, char** argv)
 							std::string serializedSuccess;
 							authSucc.set_requestid(requestID);
 							authSucc.set_userid(authResult);
+
+							std::string creatDate = GetCreationDate(authResult);
+							authSucc.set_creationdate(creatDate);
+
+
 							authSucc.SerializeToString(&serializedSuccess);
 
 							ChatMessage msgToSend;
@@ -571,6 +590,7 @@ int main(int argc, char** argv)
 							msgToSend.messageLength = msgToSend.message.length();
 							msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 							result = sendMessage(socket, msgToSend);
+							std::cout << "Auth success" << std::endl;
 
 
 							continue;
@@ -596,6 +616,7 @@ int main(int argc, char** argv)
 						msgToSend.messageLength = msgToSend.message.length();
 						msgToSend.header.packetSize = 10 + msgToSend.messageLength;
 						result = sendMessage(socket, msgToSend);
+						std::cout << "Auth failure" << std::endl;
 						continue;
 					}
 					else
