@@ -1,7 +1,7 @@
 # NET1
 
 - DEMO (outdated): https://www.youtube.com/watch?v=r1xb2h-P_Vc
-- DEMO (indated?): https://youtu.be/knWo9potAe0
+- DEMO (current): https://youtu.be/knWo9potAe0
 
 
 ## Building and Running
